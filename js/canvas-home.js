@@ -71,9 +71,16 @@
         const bgMode = cs.bgMode || state.canvasBg;
         const showGrid = cs.showGrid !== undefined ? cs.showGrid : state.canvasShowGrid;
 
+        const maxRight = Math.max(2000, ...visualItems.map((it) => (it.canvas.x || 0) + (it.canvas.w || 220) + 400));
+        const maxBottom = Math.max(1400, ...visualItems.map((it) => (it.canvas.y || 0) + (it.canvas.h || 210) + 400));
+
         container.innerHTML = `
+          <div id="canvasViewWrap" class="canvas-view-wrap ${state.canvasFullscreen ? 'fullscreen' : ''}">
           <div class="canvas-toolbar">
             <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+              <button id="canvasFullscreenBtn" class="btn btn-sm ${state.canvasFullscreen ? 'btn-primary' : ''}" type="button" title="Moodboard auf ganzes Browserfenster vergrößern">
+                ${state.canvasFullscreen ? '✕ Vollbild beenden' : '⛶ Vollbild'}
+              </button>
               <button id="canvasZoomOutBtn" class="btn btn-sm" type="button" title="Verkleinern">－</button>
               <span id="canvasZoomLabel" style="font-size:0.8rem; min-width:44px; text-align:center;">${Math.round(state.canvasZoom * 100)} %</span>
               <button id="canvasZoomInBtn" class="btn btn-sm" type="button" title="Vergrößern">＋</button>
@@ -116,7 +123,7 @@
 
           <div class="canvas-split-layout ${state.canvasSplitOpen ? 'with-split' : ''}">
             <div id="canvasViewport" class="canvas-viewport ${showGrid ? '' : 'no-grid'} ${bgMode === 'white' ? 'bg-white' : (bgMode === 'dark' ? 'bg-dark' : '')}">
-              <div id="canvasStage" class="canvas-stage" style="transform: translate(${state.canvasPanX}px, ${state.canvasPanY}px) scale(${state.canvasZoom});">
+              <div id="canvasStage" class="canvas-stage" style="width:${Math.round(maxRight * state.canvasZoom)}px; height:${Math.round(maxBottom * state.canvasZoom)}px; transform: scale(${state.canvasZoom});">
                 ${visualItems.map((item) => {
                   const c = item.canvas;
                   const isSelected = state.selectedCanvasIds.has(item.id);
@@ -134,6 +141,7 @@
               </div>
             </div>
             ${state.canvasSplitOpen ? '<aside id="canvasSplitPanel" class="split-panel"></aside>' : ''}
+          </div>
           </div>
         `;
 
@@ -193,19 +201,30 @@
         setTimeout(updatePaletteBar, 120);
 
         // Toolbar-Buttons
+        document.getElementById('canvasFullscreenBtn').addEventListener('click', () => {
+          state.canvasFullscreen = !state.canvasFullscreen;
+          renderCanvasView(container, statsEl, folderId);
+        });
         document.getElementById('canvasZoomInBtn').addEventListener('click', () => {
           state.canvasZoom = Math.min(2.5, +(state.canvasZoom + 0.15).toFixed(2));
-          stage.style.transform = `translate(${state.canvasPanX}px, ${state.canvasPanY}px) scale(${state.canvasZoom})`;
+          stage.style.transform = `scale(${state.canvasZoom})`;
+          stage.style.width = `${Math.round(maxRight * state.canvasZoom)}px`;
+          stage.style.height = `${Math.round(maxBottom * state.canvasZoom)}px`;
           document.getElementById('canvasZoomLabel').textContent = `${Math.round(state.canvasZoom * 100)} %`;
         });
         document.getElementById('canvasZoomOutBtn').addEventListener('click', () => {
           state.canvasZoom = Math.max(0.35, +(state.canvasZoom - 0.15).toFixed(2));
-          stage.style.transform = `translate(${state.canvasPanX}px, ${state.canvasPanY}px) scale(${state.canvasZoom})`;
+          stage.style.transform = `scale(${state.canvasZoom})`;
+          stage.style.width = `${Math.round(maxRight * state.canvasZoom)}px`;
+          stage.style.height = `${Math.round(maxBottom * state.canvasZoom)}px`;
           document.getElementById('canvasZoomLabel').textContent = `${Math.round(state.canvasZoom * 100)} %`;
         });
         document.getElementById('canvasResetViewBtn').addEventListener('click', () => {
-          state.canvasZoom = 1; state.canvasPanX = 0; state.canvasPanY = 0;
-          stage.style.transform = 'translate(0px, 0px) scale(1)';
+          state.canvasZoom = 1;
+          stage.style.transform = 'scale(1)';
+          stage.style.width = `${maxRight}px`;
+          stage.style.height = `${maxBottom}px`;
+          viewport.scrollTo({ left: 0, top: 0, behavior: 'smooth' });
           document.getElementById('canvasZoomLabel').textContent = '100 %';
         });
         document.getElementById('canvasAutoLayoutBtn').addEventListener('click', () => {
@@ -328,8 +347,8 @@
               type: 'pan',
               startX: e.clientX,
               startY: e.clientY,
-              origPanX: state.canvasPanX,
-              origPanY: state.canvasPanY
+              origScrollX: viewport.scrollLeft,
+              origScrollY: viewport.scrollTop
             };
             viewport.setPointerCapture(e.pointerId);
             return;
@@ -375,9 +394,8 @@
           const dy = (e.clientY - activeAction.startY) / state.canvasZoom;
 
           if (activeAction.type === 'pan') {
-            state.canvasPanX = activeAction.origPanX + (e.clientX - activeAction.startX);
-            state.canvasPanY = activeAction.origPanY + (e.clientY - activeAction.startY);
-            stage.style.transform = `translate(${state.canvasPanX}px, ${state.canvasPanY}px) scale(${state.canvasZoom})`;
+            viewport.scrollLeft = activeAction.origScrollX - (e.clientX - activeAction.startX);
+            viewport.scrollTop = activeAction.origScrollY - (e.clientY - activeAction.startY);
           } else if (activeAction.type === 'drag') {
             activeAction.item.canvas.x = Math.round(activeAction.origX + dx);
             activeAction.item.canvas.y = Math.round(activeAction.origY + dy);
