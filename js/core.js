@@ -4,7 +4,7 @@
       /* ========================================================================
          1. KONFIGURATION & STATE
          ======================================================================== */
-      const APP_VERSION = 'v1.0.2';
+      const APP_VERSION = 'v1.0.3';
       const LS_KEYS = {
         clientId: 'mb_oauth_client_id',
         rootName: 'mb_root_folder_name',
@@ -46,6 +46,7 @@
         canvasPanX: 0,
         canvasPanY: 0,
         canvasLocked: window.innerWidth < 640,
+        canvasFullscreen: false,
         canvasFitMode: 'cover', // 'cover' | 'contain'
         canvasBg: 'default',    // 'default' | 'white' | 'dark'
         canvasShowGrid: true,
