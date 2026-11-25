@@ -1295,6 +1295,29 @@
     .tag-filter-option:hover {
       background-color: var(--card-subtle);
     }
+
+    .toast-box {
+      position: fixed;
+      right: 20px;
+      bottom: 20px;
+      z-index: 200;
+      max-width: 360px;
+      padding: 10px 16px;
+      border-radius: var(--radius-pill);
+      background-color: var(--accent-fir);
+      color: #FFFFFF;
+      font-size: 0.84rem;
+      font-weight: 500;
+      box-shadow: var(--shadow-md);
+      pointer-events: none;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+
+    .toast-box.hidden {
+      opacity: 0;
+      transform: translateY(8px);
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
@@ -1374,10 +1397,6 @@
         <button id="exitDemoBtn" class="btn btn-sm" type="button">Zu Google Drive wechseln</button>
       </div>
 
-      <div id="syncStatusBanner" class="status-banner warning hidden">
-        <span id="syncStatusText">Synchronisiere…</span>
-      </div>
-
       <div class="workspace-header">
         <div>
           <div id="breadcrumb" class="breadcrumb">Moodboards</div>
@@ -1400,6 +1419,7 @@
 
   <!-- Versteckter File-Input für Upload / Handy-Kamera -->
   <input id="fileUploadInput" type="file" accept="image/*" multiple style="display:none;" />
+  <div id="toastBox" class="toast-box hidden" role="status" aria-live="polite"></div>
 
   <!-- ======================================================================
        MODAL: EINSTELLUNGEN (OAUTH CLIENT-ID & SCOPE)
@@ -1738,9 +1758,14 @@
       }
 
       function showSyncStatus(text, show = true) {
-        const el = document.getElementById('syncStatusBanner');
-        document.getElementById('syncStatusText').textContent = text;
-        el.classList.toggle('hidden', !show);
+        const el = document.getElementById('toastBox');
+        if (!el) return;
+        if (show && text) {
+          el.textContent = text;
+          el.classList.remove('hidden');
+        } else {
+          el.classList.add('hidden');
+        }
       }
 
       function revokeAllObjectUrls() {
@@ -2268,7 +2293,6 @@
         }
 
         state.savingFolders.add(folderId);
-        showSyncStatus('Speichere Änderungen in Google Drive…', true);
         try {
           // Konfliktschutz: modifiedTime & Session-ID prüfen bevor wir überschreiben
           if (content.boardFileId && content.modifiedTime && !forceOverwrite) {
