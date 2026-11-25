@@ -1664,6 +1664,24 @@
     </div>
   </div>
 
+  <!-- ======================================================================
+       MODAL: UNIVERSELLES DIALOG-MODAL (ERSETZT ALERT / CONFIRM / PROMPT)
+       ====================================================================== -->
+  <div id="uiDialogModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="uiDialogTitle" style="z-index:150;">
+    <div class="modal-card" style="max-width:440px;">
+      <div class="modal-header">
+        <h2 id="uiDialogTitle" class="modal-title">Hinweis</h2>
+        <button id="uiDialogCloseBtn" class="btn-icon" type="button">✕</button>
+      </div>
+      <p id="uiDialogMessage" style="font-size:0.9rem; color:var(--text-secondary); margin:0 0 12px; white-space:pre-line;"></p>
+      <div id="uiDialogFields"></div>
+      <div class="modal-footer">
+        <button id="uiDialogCancelBtn" class="btn" type="button">Abbrechen</button>
+        <button id="uiDialogOkBtn" class="btn btn-primary" type="button">OK</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     (function () {
       'use strict';
@@ -1786,6 +1804,92 @@
           URL.revokeObjectURL(url);
         }
         state.objectUrls.clear();
+      }
+
+      function showUiDialog({ title = 'Hinweis', message = '', fields = [], showCancel = false, okText = 'OK' }) {
+        return new Promise((resolve) => {
+          const modal = document.getElementById('uiDialogModal');
+          const titleEl = document.getElementById('uiDialogTitle');
+          const msgEl = document.getElementById('uiDialogMessage');
+          const fieldsEl = document.getElementById('uiDialogFields');
+          const cancelBtn = document.getElementById('uiDialogCancelBtn');
+          const okBtn = document.getElementById('uiDialogOkBtn');
+          const closeBtn = document.getElementById('uiDialogCloseBtn');
+
+          titleEl.textContent = title;
+          msgEl.textContent = message;
+          msgEl.style.display = message ? 'block' : 'none';
+          cancelBtn.style.display = showCancel ? 'inline-flex' : 'none';
+          okBtn.textContent = okText;
+
+          fieldsEl.innerHTML = fields.map((f, idx) => `
+            <div class="form-group">
+              <label class="form-label" for="uiDlgField_${idx}">${escapeHtml(f.label || '')}</label>
+              <input id="uiDlgField_${idx}" class="form-control" type="${f.type || 'text'}" value="${escapeHtml(f.value ?? '')}" placeholder="${escapeHtml(f.placeholder || '')}" />
+            </div>
+          `).join('');
+
+          function cleanup(result) {
+            modal.classList.add('hidden');
+            okBtn.removeEventListener('click', onOk);
+            cancelBtn.removeEventListener('click', onCancel);
+            closeBtn.removeEventListener('click', onCancel);
+            document.removeEventListener('keydown', onKey);
+            resolve(result);
+          }
+
+          function onOk() {
+            if (fields.length > 0) {
+              const values = {};
+              for (let i = 0; i < fields.length; i++) {
+                const inp = document.getElementById(`uiDlgField_${i}`);
+                const val = inp.value;
+                if (fields[i].required && !val.trim()) {
+                  inp.focus();
+                  return;
+                }
+                values[fields[i].key] = val;
+              }
+              cleanup(values);
+            } else {
+              cleanup(true);
+            }
+          }
+
+          function onCancel() {
+            cleanup(fields.length > 0 ? null : false);
+          }
+
+          function onKey(e) {
+            if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+            else if (e.key === 'Enter' && document.activeElement && document.activeElement.tagName !== 'BUTTON') {
+              e.preventDefault();
+              onOk();
+            }
+          }
+
+          okBtn.addEventListener('click', onOk);
+          cancelBtn.addEventListener('click', onCancel);
+          closeBtn.addEventListener('click', onCancel);
+          document.addEventListener('keydown', onKey);
+          modal.classList.remove('hidden');
+
+          const firstInput = document.getElementById('uiDlgField_0');
+          if (firstInput) setTimeout(() => { firstInput.focus(); firstInput.select(); }, 30);
+          else setTimeout(() => okBtn.focus(), 30);
+        });
+      }
+
+      function uiAlert(message, title = 'Hinweis') {
+        return showUiDialog({ title, message, showCancel: false, okText: 'OK' });
+      }
+
+      function uiConfirm(message, title = 'Bestätigung', okText = 'OK') {
+        return showUiDialog({ title, message, showCancel: true, okText });
+      }
+
+      function uiPromptForm(title, fields, message = '') {
+        return showUiDialog({ title, message, fields, showCancel: true, okText: 'Speichern' });
       }
 
       /* ========================================================================
@@ -1982,7 +2086,7 @@
           scope,
           callback: async (tokenResponse) => {
             if (tokenResponse.error) {
-              alert('Google Login fehlgeschlagen: ' + tokenResponse.error);
+              await uiAlert('Google Login fehlgeschlagen: ' + tokenResponse.error, 'Fehler');
               return;
             }
             state.accessToken = tokenResponse.access_token;
@@ -2006,7 +2110,7 @@
           return;
         }
         if (!state.tokenClient && !initAuthClient()) {
-          alert('Google Identity Services Script wird noch geladen oder ist offline. Bitte kurz warten.');
+          uiAlert('Google Identity Services Script wird noch geladen oder ist offline. Bitte kurz warten.');
           return;
         }
         state.tokenClient.requestAccessToken({ prompt: state.accessToken ? '' : 'consent' });
@@ -2172,7 +2276,7 @@
           }
         } catch (err) {
           console.error(err);
-          alert(err.message);
+          await uiAlert(err.message, 'Fehler');
         } finally {
           showSyncStatus('', false);
         }
@@ -2267,7 +2371,7 @@
           renderMainView();
         } catch (err) {
           console.error(err);
-          if (err.status !== 401) alert(err.message);
+          if (err.status !== 401) await uiAlert(err.message, 'Fehler');
         } finally {
           showSyncStatus('', false);
         }
@@ -2340,7 +2444,7 @@
           if (err.status === 401) {
             bufferBoardLocally(folderId, content.board);
           } else {
-            alert('Fehler beim Speichern: ' + err.message);
+            await uiAlert('Fehler beim Speichern: ' + err.message, 'Fehler');
           }
         } finally {
           state.savingFolders.delete(folderId);
@@ -2428,9 +2532,11 @@
       }
 
       async function promptCreateFolder(parentId) {
-        const name = prompt('Name des neuen Ordners / Projekts:');
-        if (!name || !name.trim()) return;
-        const cleanName = name.trim();
+        const res = await uiPromptForm('Neuen Ordner / Projekt anlegen', [
+          { key: 'name', label: 'Name', placeholder: 'z. B. Weihnachten 2026', required: true }
+        ]);
+        if (!res || !res.name.trim()) return;
+        const cleanName = res.name.trim();
 
         if (state.mode === 'demo') {
           const demo = DemoAdapter.load();
@@ -2451,7 +2557,7 @@
           state.expandedFolders.add(parentId);
           await openFolder(created.id);
         } catch (err) {
-          alert(err.message);
+          await uiAlert(err.message, 'Fehler');
         } finally {
           showSyncStatus('', false);
         }
@@ -2460,13 +2566,16 @@
       async function promptRenameFolder(folderId) {
         const folder = state.folders.find((f) => f.id === folderId);
         if (!folder) return;
-        const nextName = prompt('Neuer Ordnername:', folder.name);
-        if (!nextName || !nextName.trim() || nextName.trim() === folder.name) return;
+        const res = await uiPromptForm('Ordner umbenennen', [
+          { key: 'name', label: 'Neuer Ordnername', value: folder.name, required: true }
+        ]);
+        if (!res || !res.name.trim() || res.name.trim() === folder.name) return;
+        const nextName = res.name.trim();
 
         if (state.mode === 'demo') {
           const demo = DemoAdapter.load();
           const target = demo.folders.find((f) => f.id === folderId);
-          if (target) target.name = nextName.trim();
+          if (target) target.name = nextName;
           DemoAdapter.save(demo);
           state.folders = demo.folders;
           renderSidebar();
@@ -2476,12 +2585,12 @@
 
         showSyncStatus('Benenne Ordner um…', true);
         try {
-          await DriveAdapter.renameFile(folderId, nextName.trim());
-          folder.name = nextName.trim();
+          await DriveAdapter.renameFile(folderId, nextName);
+          folder.name = nextName;
           renderSidebar();
           renderMainView();
         } catch (err) {
-          alert(err.message);
+          await uiAlert(err.message, 'Fehler');
         } finally {
           showSyncStatus('', false);
         }
@@ -2905,7 +3014,7 @@
       }
 
       async function deleteItemById(itemId, folderId) {
-        if (!confirm('Dieses Element wirklich entfernen?')) return;
+        if (!(await uiConfirm('Dieses Element wirklich entfernen?', 'Element löschen', 'Löschen'))) return;
         const targetFolderId = folderId || state.activeFolderId;
         const content = state.folderContents[targetFolderId];
         if (!content) return;
@@ -2923,7 +3032,7 @@
          ======================================================================== */
       async function handleFileUploads(fileList) {
         if (!state.activeFolderId) {
-          alert('Bitte wähle zuerst einen Projektordner aus.');
+          await uiAlert('Bitte wähle zuerst einen Projektordner aus.');
           return;
         }
         const folderId = state.activeFolderId;
@@ -2985,7 +3094,7 @@
           scheduleBoardSave(folderId);
           renderMainView();
         } catch (err) {
-          alert('Upload fehlgeschlagen: ' + err.message);
+          await uiAlert('Upload fehlgeschlagen: ' + err.message, 'Fehler');
         } finally {
           showSyncStatus('', false);
         }
@@ -2993,23 +3102,25 @@
 
       async function createNewGoogleDoc() {
         if (!state.activeFolderId) {
-          alert('Bitte wähle zuerst einen Ordner aus.');
+          await uiAlert('Bitte wähle zuerst einen Ordner aus.');
           return;
         }
         if (state.mode !== 'drive') {
-          alert('Google Docs können nur erstellt werden, wenn du mit Google Drive verbunden bist.');
+          await uiAlert('Google Docs können nur erstellt werden, wenn du mit Google Drive verbunden bist.');
           return;
         }
-        const title = prompt('Name des neuen Google Docs:', 'Projekt-Notizen');
-        if (!title || !title.trim()) return;
+        const res = await uiPromptForm('Neues Google Doc erstellen', [
+          { key: 'title', label: 'Dokument-Name', value: 'Projekt-Notizen', required: true }
+        ]);
+        if (!res || !res.title.trim()) return;
         showSyncStatus('Erstelle Google Doc…', true);
         try {
-          const doc = await DriveAdapter.createGoogleDoc(state.activeFolderId, title.trim());
+          const doc = await DriveAdapter.createGoogleDoc(state.activeFolderId, res.title.trim());
           state.folderContents[state.activeFolderId].driveFiles.unshift(doc);
           renderMainView();
           if (doc.webViewLink) window.open(doc.webViewLink, '_blank', 'noopener');
         } catch (err) {
-          alert(err.message);
+          await uiAlert(err.message, 'Fehler');
         } finally {
           showSyncStatus('', false);
         }
@@ -3049,7 +3160,7 @@
 
       function openItemModal(item = null) {
         if (!state.activeFolderId && !item) {
-          alert('Bitte wähle zuerst einen Projektordner aus.');
+          uiAlert('Bitte wähle zuerst einen Projektordner aus.');
           return;
         }
         state.editingItem = item;
@@ -3149,18 +3260,15 @@
       document.getElementById('exitDemoBtn').addEventListener('click', requestGoogleSignIn);
 
       document.getElementById('newRootFolderBtn').addEventListener('click', () => {
-        const tabsEl = document.getElementById('viewTabs');
-        if (tabsEl) tabsEl.style.display = (state.mode === 'unauthenticated' || state.quickView) ? 'none' : 'flex';
-
         if (state.mode === 'unauthenticated') {
-          alert('Bitte verbinde dich zuerst mit Google Drive oder starte den Demo-Modus.');
+          uiAlert('Bitte verbinde dich zuerst mit Google Drive oder starte den Demo-Modus.');
           return;
         }
         promptCreateFolder(state.rootFolderId);
       });
 
       document.getElementById('addImageBtn').addEventListener('click', () => {
-        if (!state.activeFolderId) { alert('Bitte wähle zuerst einen Ordner aus.'); return; }
+        if (!state.activeFolderId) { uiAlert('Bitte wähle zuerst einen Ordner aus.'); return; }
         document.getElementById('fileUploadInput').click();
       });
 
@@ -3198,7 +3306,7 @@
           const found = findItemWithFolder(state.editingItem.id);
           scheduleBoardSave(found ? found.fId : state.activeFolderId);
         } else {
-          if (!url) { alert('Bitte gib eine URL ein.'); return; }
+          if (!url) { uiAlert('Bitte gib eine URL ein.'); return; }
           const content = state.folderContents[state.activeFolderId];
           content.board.items.unshift({
             id: uid('bm'),
@@ -3847,26 +3955,28 @@
         // Grundriss-Hotspots (klicken zum Ansehen oder im Edit-Modus neu setzen)
         const fpImg = document.getElementById('floorplanImg');
         if (fpImg && edit) {
-          fpImg.addEventListener('click', (e) => {
+          fpImg.addEventListener('click', async (e) => {
             const rect = fpImg.getBoundingClientRect();
             const x = +(((e.clientX - rect.left) / rect.width) * 100).toFixed(1);
             const y = +(((e.clientY - rect.top) / rect.height) * 100).toFixed(1);
-            const label = prompt('Bezeichnung für diesen Pin (z. B. Esstisch 300x100 cm):');
-            if (!label || !label.trim()) return;
-            const note = prompt('Maß / Notiz (optional):', '') || '';
-            home.floorplan.hotspots.push({ x, y, label: label.trim(), note: note.trim() });
+            const res = await uiPromptForm('Grundriss-Pin setzen', [
+              { key: 'label', label: 'Bezeichnung', placeholder: 'z. B. Esstisch 300x100 cm', required: true },
+              { key: 'note', label: 'Maß / Notiz (optional)', placeholder: 'z. B. Abstand zur Wand 80 cm' }
+            ]);
+            if (!res || !res.label.trim()) return;
+            home.floorplan.hotspots.push({ x, y, label: res.label.trim(), note: (res.note || '').trim() });
             scheduleBoardSave(folderId);
             renderProjectHomeView(container, statsEl, folderId);
           });
         }
         container.querySelectorAll('[data-hotspot-idx]').forEach((pin) => {
-          pin.addEventListener('click', (e) => {
+          pin.addEventListener('click', async (e) => {
             e.stopPropagation();
             const idx = Number(pin.getAttribute('data-hotspot-idx'));
             const hp = home.floorplan.hotspots[idx];
             const infoBox = document.getElementById('hotspotInfoBox');
             if (edit) {
-              if (confirm(`Pin #${idx + 1} (${hp.label}) löschen?`)) {
+              if (await uiConfirm(`Pin #${idx + 1} (${hp.label}) löschen?`, 'Pin löschen', 'Löschen')) {
                 home.floorplan.hotspots.splice(idx, 1);
                 scheduleBoardSave(folderId);
                 renderProjectHomeView(container, statsEl, folderId);
@@ -3885,7 +3995,7 @@
         const content = state.folderContents[folderId];
         const images = (content.board.items || []).filter((it) => it.type === 'image');
         if (images.length === 0) {
-          alert('Bitte lade zuerst mindestens ein eigenes Bild in diesen Ordner hoch, um Farben per Pipette aufzunehmen.');
+          await uiAlert('Bitte lade zuerst mindestens ein eigenes Bild in diesen Ordner hoch, um Farben per Pipette aufzunehmen.');
           return;
         }
         const select = document.getElementById('eyedropperImageSelect');
@@ -3924,13 +4034,15 @@
         document.getElementById('eyedropperHex').textContent = hex;
       });
 
-      document.getElementById('eyedropperApplyBtn').addEventListener('click', () => {
+      document.getElementById('eyedropperApplyBtn').addEventListener('click', async () => {
         const content = state.folderContents[state.activeFolderId];
         if (!content) return;
         const home = ensureProjectHomeStructure(content.board, '');
-        const name = prompt('Name für diese Farbe / Material:', `Farbe ${state.eyedropperPickedHex}`);
-        if (!name) return;
-        home.swatches.push({ id: uid('sw'), name: name.trim(), hex: state.eyedropperPickedHex, material: '', note: 'Per Pipette aufgenommen' });
+        const res = await uiPromptForm('Farbe als Swatch speichern', [
+          { key: 'name', label: 'Name für diese Farbe / Material', value: `Farbe ${state.eyedropperPickedHex}`, required: true }
+        ]);
+        if (!res || !res.name.trim()) return;
+        home.swatches.push({ id: uid('sw'), name: res.name.trim(), hex: state.eyedropperPickedHex, material: '', note: 'Per Pipette aufgenommen' });
         scheduleBoardSave(state.activeFolderId);
         closeModal('eyedropperModal');
         if (state.activeView === 'home') renderMainView();
@@ -3967,7 +4079,7 @@
           closeModal('geminiImportModal');
           renderMainView();
         } catch (err) {
-          alert('Ungültiges JSON: ' + err.message);
+          uiAlert('Ungültiges JSON: ' + err.message, 'Fehler');
         }
       });
 
@@ -4172,12 +4284,14 @@
               scheduleBoardSave(fId);
               renderPlanningView(container, statsEl, folderId, 'todos');
             });
-            row.querySelector('[data-todo-edit]').addEventListener('click', () => {
-              const nextText = prompt('Aufgabe bearbeiten:', todo.text);
-              if (nextText === null || !nextText.trim()) return;
-              const nextCat = prompt('Bereich / Kategorie:', todo.category || 'Allgemein');
-              todo.text = nextText.trim();
-              if (nextCat !== null) todo.category = nextCat.trim() || 'Allgemein';
+            row.querySelector('[data-todo-edit]').addEventListener('click', async () => {
+              const res = await uiPromptForm('Aufgabe bearbeiten', [
+                { key: 'text', label: 'Aufgabe', value: todo.text, required: true },
+                { key: 'category', label: 'Bereich / Kategorie', value: todo.category || 'Allgemein' }
+              ]);
+              if (!res || !res.text.trim()) return;
+              todo.text = res.text.trim();
+              todo.category = (res.category || '').trim() || 'Allgemein';
               scheduleBoardSave(fId);
               renderPlanningView(container, statsEl, folderId, 'todos');
             });
@@ -4339,15 +4453,17 @@
             });
           });
 
-          row.querySelector('[data-edit-shop]').addEventListener('click', () => {
+          row.querySelector('[data-edit-shop]').addEventListener('click', async () => {
             if (kind === 'item') {
               openItemModal(entry.ref);
             } else {
-              const nextTitle = prompt('Bezeichnung bearbeiten:', entry.ref.title);
-              if (nextTitle === null || !nextTitle.trim()) return;
-              const nextUrl = prompt('Shop-Link / URL (optional):', entry.ref.url || '');
-              entry.ref.title = nextTitle.trim();
-              if (nextUrl !== null) entry.ref.url = nextUrl.trim();
+              const res = await uiPromptForm('Einkaufsposten bearbeiten', [
+                { key: 'title', label: 'Bezeichnung', value: entry.ref.title, required: true },
+                { key: 'url', label: 'Shop-Link / URL (optional)', value: entry.ref.url || '', type: 'url', placeholder: 'https://...' }
+              ]);
+              if (!res || !res.title.trim()) return;
+              entry.ref.title = res.title.trim();
+              entry.ref.url = (res.url || '').trim();
               scheduleBoardSave(fId);
               renderPlanningView(container, statsEl, folderId, 'budget');
             }
@@ -4732,7 +4848,7 @@
         if (!content) return;
         const images = (content.board.items || []).filter((it) => it.type === 'image');
         if (images.length === 0) {
-          alert('Keine eigenen Bilder in diesem Ordner vorhanden.');
+          await uiAlert('Keine eigenen Bilder in diesem Ordner vorhanden.');
           return;
         }
 
@@ -4756,9 +4872,10 @@
 
         const { geminiKey } = getSettings();
         if (geminiKey) {
-          const rescanAll = confirm(
-            'Gemini API Key erkannt!\n\n' +
-            'Klicke OK, um Bilder ohne Gemini-Beschreibung jetzt automatisch mit Gemini zu verschlagworten (mit 2 Sek. Pause zwischen Bildern).'
+          const rescanAll = await uiConfirm(
+            'Klicke OK, um Bilder ohne Gemini-Beschreibung jetzt automatisch mit Gemini zu verschlagworten (mit 2 Sek. Pause zwischen Bildern).',
+            'Gemini KI-Analyse starten',
+            'Analysieren'
           );
           if (!rescanAll) { renderMainView(); return; }
 
@@ -4777,7 +4894,7 @@
               }
             } catch (err) {
               console.warn('Gemini Fehler:', err);
-              alert('Gemini-Analyse abgebrochen: ' + err.message);
+              await uiAlert('Gemini-Analyse abgebrochen: ' + err.message, 'Fehler');
               break;
             }
             if (i < list.length - 1) await new Promise((r) => setTimeout(r, 2000));
@@ -4788,10 +4905,10 @@
           return;
         }
 
-        const useClip = confirm(
-          'Farbbegriffe (z. B. „salbei“, „gold“, „beige“) wurden sofort ergänzt!\n\n' +
-          'Möchtest du zusätzlich die KI-Motiverkennung (CLIP) im Browser aktivieren?\n' +
-          '(Lädt einmalig ~100 MB im Hintergrund – auf Desktop/WLAN empfohlen.)'
+        const useClip = await uiConfirm(
+          'Farbbegriffe (z. B. „salbei“, „gold“, „beige“) wurden sofort ergänzt!\n\nMöchtest du zusätzlich die KI-Motiverkennung (CLIP) im Browser aktivieren?\n(Lädt einmalig ~100 MB im Hintergrund – auf Desktop/WLAN empfohlen.)',
+          'KI-Motiverkennung (CLIP)',
+          'Aktivieren'
         );
         if (!useClip) {
           renderMainView();
@@ -4859,7 +4976,7 @@
 
       async function exportFolderToGeminiPdf(folderId) {
         if (!folderId || !state.folderContents[folderId]) {
-          alert('Bitte wähle zuerst einen Projektordner aus.');
+          await uiAlert('Bitte wähle zuerst einen Projektordner aus.');
           return;
         }
         const content = state.folderContents[folderId];
@@ -5014,13 +5131,13 @@
             setTimeout(() => showSyncStatus('', false), 2500);
           }
         } catch (err) {
-          alert('PDF-Export fehlgeschlagen: ' + err.message);
+          await uiAlert('PDF-Export fehlgeschlagen: ' + err.message, 'Fehler');
           showSyncStatus('', false);
         }
       }
 
       document.getElementById('aiScanBtn').addEventListener('click', () => {
-        if (!state.activeFolderId) { alert('Bitte wähle zuerst einen Ordner aus.'); return; }
+        if (!state.activeFolderId) { uiAlert('Bitte wähle zuerst einen Ordner aus.'); return; }
         runAiScanForFolder(state.activeFolderId);
       });
 
@@ -5046,7 +5163,7 @@
         if (e.key === 'Enter') { e.preventDefault(); addGlobalTagFromInput(); }
       });
       document.getElementById('resetDefaultTagsBtn').addEventListener('click', async () => {
-        if (!confirm('Tag-Liste durch die aktuelle Standard-Liste ersetzen?')) return;
+        if (!(await uiConfirm('Tag-Liste durch die aktuelle Standard-Liste ersetzen?', 'Standard-Tags laden', 'Ersetzen'))) return;
         state.globalTags = ['Basteln', 'Material', 'Deko', 'Inspiration', 'Weihnachten', 'Dekoobjekt', 'Verpackung', 'Möbel', 'Tischdeko', 'Trockenblume', 'Streudeko', 'Karte', 'Ostern', 'Christbaum', 'Vase', 'Kuchen', 'Rezept', 'Winter', 'Dekobasis', 'Kerzenhalter', 'Outdoor', 'Kerze', 'Plätzchen', 'Sommer', 'Frühling', 'Herbst', 'Pflanzen'];
         state.activeTagFilters.clear();
         await saveGlobalTags();
