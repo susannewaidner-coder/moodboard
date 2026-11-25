@@ -4258,11 +4258,16 @@
           contents: [{
             parts: [
               {
-                text: 'Analysiere dieses Deko-/Einrichtungs-/Event-Bild für ein Moodboard. Antworte ausschließlich als reines JSON (ohne Markdown-Codeblock) im Format: {"title":"Kurzer, sprechender deutscher Bildtitel (max. 6 Wörter)","description":"Prägnante Beschreibung auf Deutsch (1–2 Sätze zu Motiv, Material, Stil und Farben)","tags":["Tag1","Tag2","Tag3","Tag4"]} (maximal 4 präzise deutsche Tags, z. B. "Christbaumkugel", "Salbei", "Glas", "Matt").'
+                text: 'Analysiere dieses Deko-/Einrichtungs-/Event-Bild für ein Moodboard. Antworte als JSON mit: {"title":"Kurzer deutscher Bildtitel (max 6 Wörter)","description":"Prägnante Beschreibung auf Deutsch (1-2 Sätze zu Motiv, Material, Stil, Farben)","tags":["Tag1","Tag2","Tag3","Tag4"]}.'
               },
               { inline_data: { mime_type: 'image/jpeg', data: base64 } }
             ]
-          }]
+          }],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            maxOutputTokens: 512,
+            temperature: 0.2
+          }
         };
 
         for (let attempt = 0; attempt < 3; attempt++) {
@@ -4281,8 +4286,17 @@
           }
           const json = await res.json();
           const rawText = (json.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
-          const cleaned = rawText.replace(/^```json\s*/i, '').replace(/```$/, '').trim();
-          return JSON.parse(cleaned);
+          const match = rawText.match(/\{[\s\S]*\}/);
+          const cleaned = (match ? match[0] : rawText).replace(/[\u0000-\u001F]+/g, ' ');
+          try {
+            return JSON.parse(cleaned);
+          } catch (parseErr) {
+            if (attempt < 2) {
+              await new Promise((r) => setTimeout(r, 1000));
+              continue;
+            }
+            throw parseErr;
+          }
         }
         throw new Error('Gemini API vorübergehend überlastet (429/503).');
       }
