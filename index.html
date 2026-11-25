@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>Moodboard &amp; Projekt-Planer — Google Drive</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <link rel="stylesheet" href="css/styles.css?v=1.0.5" />
+  <link rel="stylesheet" href="css/styles.css?v=1.0.6" />
 </head>
 </head>
 <body>
@@ -47,11 +47,11 @@
 
       <div class="sidebar-footer">
         <div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
-          <div id="authStatusText">Nicht verbunden</div>
+          <span id="authStatusText" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:0.76rem;">● Getrennt</span>
           <span id="appVersionBadge" style="font-size:0.72rem; color:var(--text-muted); font-family:monospace;"></span>
         </div>
         <div style="display:flex; gap:6px; flex-wrap:wrap;">
-          <button id="authActionBtn" class="btn btn-primary btn-sm" type="button">Mit Google verbinden</button>
+          <button id="authActionBtn" class="btn btn-primary btn-sm" type="button" style="flex:1;">Verbinden</button>
           <button id="openSettingsBtn" class="btn btn-sm" type="button">⚙️</button>
         </div>
       </div>
@@ -362,9 +362,9 @@
     </div>
   </div>
 
-  <script defer src="js/core.js?v=1.0.5"></script>
-  <script defer src="js/views.js?v=1.0.5"></script>
-  <script defer src="js/canvas-home.js?v=1.0.5"></script>
-  <script defer src="js/ai-pdf.js?v=1.0.5"></script>
+  <script defer src="js/core.js?v=1.0.6"></script>
+  <script defer src="js/views.js?v=1.0.6"></script>
+  <script defer src="js/canvas-home.js?v=1.0.6"></script>
+  <script defer src="js/ai-pdf.js?v=1.0.6"></script>
 </body>
 </html>
