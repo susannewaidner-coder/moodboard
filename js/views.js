@@ -30,8 +30,7 @@
                   <button class="tree-toggle ${hasSub ? '' : 'empty'}" data-toggle-folder="${folder.id}" type="button" title="${hasSub ? (isExpanded ? 'Zuklappen' : 'Ausklappen') : ''}">${hasSub ? (isExpanded ? '▼' : '▶') : ''}</button>
                   <span class="tree-label" data-select-folder="${folder.id}">📁 ${escapeHtml(folder.name)}</span>
                   <span class="tree-actions">
-                    <button class="btn-icon" data-add-sub="${folder.id}" type="button" title="Unterordner anlegen">＋</button>
-                    <button class="btn-icon" data-rename-folder="${folder.id}" type="button" title="Umbenennen">✎</button>
+                    <button class="btn-icon" data-folder-menu="${folder.id}" type="button" title="Ordner-Aktionen">⋯</button>
                   </span>
                 </div>
                 ${hasSub && isExpanded ? `<div class="tree-children">${buildLevel(folder.id)}</div>` : ''}
@@ -60,17 +59,44 @@
           });
         });
 
-        treeEl.querySelectorAll('[data-add-sub]').forEach((btn) => {
-          btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            promptCreateFolder(btn.getAttribute('data-add-sub'));
-          });
-        });
+        function closeFolderMenu() {
+          const old = document.getElementById('treeMenuPopover');
+          if (old) old.remove();
+        }
 
-        treeEl.querySelectorAll('[data-rename-folder]').forEach((btn) => {
+        treeEl.querySelectorAll('[data-folder-menu]').forEach((btn) => {
           btn.addEventListener('click', (e) => {
             e.stopPropagation();
-            promptRenameFolder(btn.getAttribute('data-rename-folder'));
+            const fId = btn.getAttribute('data-folder-menu');
+            const existing = document.getElementById('treeMenuPopover');
+            if (existing && existing.getAttribute('data-for') === fId) {
+              closeFolderMenu();
+              return;
+            }
+            closeFolderMenu();
+
+            const rect = btn.getBoundingClientRect();
+            const menu = document.createElement('div');
+            menu.id = 'treeMenuPopover';
+            menu.setAttribute('data-for', fId);
+            menu.className = 'tree-menu-popover';
+            menu.style.top = `${Math.min(window.innerHeight - 100, rect.bottom + 4)}px`;
+            menu.style.left = `${Math.min(window.innerWidth - 185, rect.left)}px`;
+            menu.innerHTML = `
+              <button class="tree-menu-item" data-menu-action="sub" type="button">＋ Unterordner anlegen</button>
+              <button class="tree-menu-item" data-menu-action="rename" type="button">✎ Umbenennen</button>
+            `;
+            menu.addEventListener('click', (ev) => ev.stopPropagation());
+            menu.querySelector('[data-menu-action="sub"]').addEventListener('click', () => {
+              closeFolderMenu();
+              promptCreateFolder(fId);
+            });
+            menu.querySelector('[data-menu-action="rename"]').addEventListener('click', () => {
+              closeFolderMenu();
+              promptRenameFolder(fId);
+            });
+            document.body.appendChild(menu);
+            document.addEventListener('click', closeFolderMenu, { once: true });
           });
         });
       }
