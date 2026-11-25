@@ -4126,22 +4126,36 @@
       }
 
       const CLIP_LABELS = [
-        { en: 'candle or candlestick', de: 'Kerze' },
-        { en: 'vase', de: 'Vase' },
-        { en: 'lamp or lighting', de: 'Lampe' },
-        { en: 'fairy lights', de: 'Lichterkette' },
-        { en: 'dining table', de: 'Esstisch' },
-        { en: 'chair or armchair', de: 'Stuhl' },
-        { en: 'sofa or couch', de: 'Sofa' },
-        { en: 'pillow or cushion', de: 'Kissen' },
-        { en: 'blanket or textile', de: 'Textil' },
+        { en: 'christmas ornament bauble', de: 'Christbaumkugel' },
         { en: 'christmas tree', de: 'Christbaum' },
         { en: 'christmas wreath', de: 'Kranz' },
-        { en: 'flowers or plant', de: 'Pflanze' },
-        { en: 'dishes or porcelain', de: 'Geschirr' },
+        { en: 'decorative garland', de: 'Girlande' },
+        { en: 'string fairy lights', de: 'Lichterkette' },
+        { en: 'wax candle', de: 'Kerze' },
+        { en: 'candlestick holder', de: 'Kerzenhalter' },
+        { en: 'lantern', de: 'Laterne' },
+        { en: 'ceramic or glass vase', de: 'Vase' },
+        { en: 'decorative figurine', de: 'Deko-Figur' },
+        { en: 'lamp or pendant light', de: 'Lampe' },
+        { en: 'dining table setting', de: 'Esstisch' },
+        { en: 'wooden table', de: 'Tisch' },
+        { en: 'chair or armchair', de: 'Stuhl' },
+        { en: 'sofa or couch', de: 'Sofa' },
+        { en: 'throw pillow cushion', de: 'Kissen' },
+        { en: 'blanket or plaid', de: 'Decke' },
+        { en: 'tablecloth or table runner', de: 'Tischdecke' },
+        { en: 'linen napkin', de: 'Serviette' },
+        { en: 'plates and tableware', de: 'Geschirr' },
+        { en: 'wine glass or glassware', de: 'Gläser' },
+        { en: 'cup or mug', de: 'Tasse' },
+        { en: 'flowers or bouquet', de: 'Blumen' },
+        { en: 'houseplant or greenery', de: 'Pflanze' },
+        { en: 'eucalyptus or pine branch', de: 'Zweige' },
+        { en: 'pinecone', de: 'Tannenzapfen' },
         { en: 'mirror', de: 'Spiegel' },
-        { en: 'wooden furniture or oak', de: 'Holz' },
-        { en: 'ceramic decoration', de: 'Keramik' }
+        { en: 'wooden tray or board', de: 'Holztablett' },
+        { en: 'gift box with ribbon', de: 'Geschenk' },
+        { en: 'carpet or rug', de: 'Teppich' }
       ];
 
       let clipWorker = null;
@@ -4157,7 +4171,7 @@
                 const { pipeline } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
                 classifier = await pipeline('zero-shot-image-classification', 'Xenova/clip-vit-base-patch32');
               }
-              const res = await classifier(imageUrl, labels);
+              const res = await classifier(imageUrl, labels, { hypothesis_template: 'a photo of a {}' });
               self.postMessage({ type: 'result', id, res });
             } catch (err) {
               self.postMessage({ type: 'error', id, error: err.message || String(err) });
@@ -4217,9 +4231,17 @@
           } else if (msg.type === 'result') {
             const item = images.find((x) => x.id === msg.id);
             if (item) {
-              const top = (msg.res || []).filter((r) => r.score >= 0.14).slice(0, 3).map((r) => enToDe[r.label] || r.label);
-              item.ai.labels = Array.from(new Set(top));
-              item.tags = Array.from(new Set([...(item.tags || []), ...item.ai.labels]));
+              const sorted = (msg.res || []).slice().sort((a, b) => b.score - a.score);
+              const bestScore = sorted[0] ? sorted[0].score : 0;
+              const picked = sorted
+                .filter((r, idx) => (idx === 0 && r.score >= 0.16) || (r.score >= 0.22 && r.score >= bestScore * 0.65))
+                .slice(0, 2)
+                .map((r) => enToDe[r.label] || r.label);
+
+              const prevAiLabels = new Set(item.ai.labels || []);
+              const manualTags = (item.tags || []).filter((t) => !prevAiLabels.has(t));
+              item.ai.labels = Array.from(new Set(picked));
+              item.tags = Array.from(new Set([...manualTags, ...item.ai.labels]));
               scheduleBoardSave(folderId);
             }
           } else if (msg.type === 'error') {
