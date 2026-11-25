@@ -208,11 +208,12 @@
     }
 
     .tree-toggle {
-      width: 18px;
-      height: 18px;
-      border: none;
-      background: transparent;
-      color: var(--text-muted);
+      width: 22px;
+      height: 22px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      background: var(--bg-color);
+      color: var(--text-primary);
       cursor: pointer;
       display: inline-flex;
       align-items: center;
@@ -220,6 +221,19 @@
       padding: 0;
       font-size: 0.72rem;
       flex-shrink: 0;
+      transition: border-color 0.15s ease, background-color 0.15s ease;
+    }
+
+    .tree-toggle:hover {
+      border-color: var(--accent-oak);
+      background-color: var(--card-bg);
+    }
+
+    .tree-toggle.empty {
+      border-color: transparent;
+      background: transparent;
+      cursor: default;
+      pointer-events: none;
     }
 
     .tree-label {
@@ -1300,22 +1314,22 @@
       </div>
 
       <div class="sidebar-scroll">
-        <div class="sidebar-section-label">Schnellsichten</div>
-        <button class="nav-item" data-quick="all" type="button">
-          <span>🗂️</span> <span>Alle geladenen Elemente</span>
-        </button>
-        <button class="nav-item" data-quick="shopping" type="button">
-          <span>🛒</span> <span>Einkaufsliste (Phase 3)</span>
-        </button>
-        <button class="nav-item" data-quick="todos" type="button">
-          <span>☑️</span> <span>Offene To-dos (Phase 3)</span>
-        </button>
-
         <div class="sidebar-section-label">
-          <span>Projekte &amp; Ordner</span>
+          <span>Projekte</span>
           <button id="newRootFolderBtn" class="btn-icon" type="button" title="Neues Hauptprojekt anlegen">＋</button>
         </div>
         <div id="folderTree"></div>
+
+        <div class="sidebar-section-label" style="margin-top:12px;">Ansichten</div>
+        <button class="nav-item" data-quick="all" type="button">
+          <span>🗂️</span> <span>Alle Elemente</span>
+        </button>
+        <button class="nav-item" data-quick="shopping" type="button">
+          <span>🛒</span> <span>Einkaufsliste</span>
+        </button>
+        <button class="nav-item" data-quick="todos" type="button">
+          <span>☑️</span> <span>Offene To-dos</span>
+        </button>
       </div>
 
       <div class="sidebar-footer">
@@ -1631,7 +1645,10 @@
         pendingSaves: 'mb_pending_board_saves',
         demoMode: 'mb_demo_mode',
         demoData: 'mb_demo_data_v1',
-        geminiKey: 'mb_gemini_api_key'
+        geminiKey: 'mb_gemini_api_key',
+        lastFolderId: 'mb_last_folder_id',
+        lastView: 'mb_last_view',
+        lastQuickView: 'mb_last_quick_view'
       };
 
       const CLIENT_SESSION_ID = 'sess-' + Math.random().toString(36).slice(2, 10);
@@ -2070,6 +2087,12 @@
         openModal('tagsManagerModal');
       }
 
+      function saveNavState() {
+        if (state.activeFolderId) localStorage.setItem(LS_KEYS.lastFolderId, state.activeFolderId);
+        localStorage.setItem(LS_KEYS.lastView, state.activeView || 'gallery');
+        localStorage.setItem(LS_KEYS.lastQuickView, state.quickView || '');
+      }
+
       async function loadDriveWorkspace() {
         showSyncStatus('Lade Ordnerstruktur aus Google Drive…', true);
         try {
@@ -2079,13 +2102,33 @@
           state.folders = await DriveAdapter.listAllSubfolders(state.rootFolderId);
           state.expandedFolders.add(state.rootFolderId);
 
-          if (!state.activeFolderId || !state.folders.some((f) => f.id === state.activeFolderId)) {
+          const savedFolderId = localStorage.getItem(LS_KEYS.lastFolderId);
+          const savedView = localStorage.getItem(LS_KEYS.lastView);
+          const savedQuick = localStorage.getItem(LS_KEYS.lastQuickView) || null;
+          if (savedView) state.activeView = savedView;
+
+          if (savedFolderId && state.folders.some((f) => f.id === savedFolderId)) {
+            state.activeFolderId = savedFolderId;
+          } else if (!state.activeFolderId || !state.folders.some((f) => f.id === state.activeFolderId)) {
             state.activeFolderId = state.folders.length > 0 ? state.folders[0].id : null;
           }
+
+          // Elternordner im Baum automatisch mit ausklappen
+          let curr = state.folders.find((f) => f.id === state.activeFolderId);
+          while (curr && curr.parents && curr.parents[0]) {
+            state.expandedFolders.add(curr.parents[0]);
+            curr = state.folders.find((f) => f.id === curr.parents[0]);
+          }
+
           renderSidebar();
           if (state.activeFolderId) {
             await openFolder(state.activeFolderId);
           } else {
+            renderMainView();
+          }
+          if (savedQuick) {
+            state.quickView = savedQuick;
+            renderSidebar();
             renderMainView();
           }
         } catch (err) {
@@ -2106,16 +2149,30 @@
         state.rootFolderId = demo.rootFolderId;
         state.folders = demo.folders;
         state.expandedFolders.add(demo.rootFolderId);
-        state.activeFolderId = demo.folders[0]?.id || null;
+
+        const savedFolderId = localStorage.getItem(LS_KEYS.lastFolderId);
+        const savedView = localStorage.getItem(LS_KEYS.lastView);
+        const savedQuick = localStorage.getItem(LS_KEYS.lastQuickView) || null;
+        if (savedView) state.activeView = savedView;
+        state.activeFolderId = (savedFolderId && demo.folders.some((f) => f.id === savedFolderId))
+          ? savedFolderId
+          : (demo.folders[0]?.id || null);
+
         updateAuthUI();
         renderSidebar();
         if (state.activeFolderId) openFolder(state.activeFolderId);
         else renderMainView();
+        if (savedQuick) {
+          state.quickView = savedQuick;
+          renderSidebar();
+          renderMainView();
+        }
       }
 
       async function openFolder(folderId) {
         state.activeFolderId = folderId;
         state.quickView = null;
+        saveNavState();
         revokeAllObjectUrls();
         renderSidebar();
 
@@ -2281,7 +2338,7 @@
             return `
               <div class="tree-node" data-folder-id="${folder.id}">
                 <div class="tree-row ${isActive ? 'active' : ''}">
-                  <button class="tree-toggle" data-toggle-folder="${folder.id}" type="button">${hasSub ? (isExpanded ? '▾' : '▸') : '•'}</button>
+                  <button class="tree-toggle ${hasSub ? '' : 'empty'}" data-toggle-folder="${folder.id}" type="button" title="${hasSub ? (isExpanded ? 'Zuklappen' : 'Ausklappen') : ''}">${hasSub ? (isExpanded ? '▼' : '▶') : ''}</button>
                   <span class="tree-label" data-select-folder="${folder.id}">📁 ${escapeHtml(folder.name)}</span>
                   <span class="tree-actions">
                     <button class="btn-icon" data-add-sub="${folder.id}" type="button" title="Unterordner anlegen">＋</button>
@@ -2433,15 +2490,15 @@
         }
 
         if (state.quickView === 'all') {
-          breadEl.textContent = 'Schnellsicht';
-          titleEl.textContent = 'Alle geladenen Elemente';
+          breadEl.textContent = 'Ansichten';
+          titleEl.textContent = 'Alle Elemente';
           renderAllItemsGallery(container, statsEl);
           return;
         }
 
         if (state.quickView === 'shopping' || state.quickView === 'todos') {
-          breadEl.textContent = 'Schnellsicht';
-          titleEl.textContent = state.quickView === 'shopping' ? 'Globale Einkaufsliste' : 'Alle offenen To-dos';
+          breadEl.textContent = 'Ansichten';
+          titleEl.textContent = state.quickView === 'shopping' ? 'Einkaufsliste' : 'Offene To-dos';
           renderGlobalQuickView(container, statsEl, state.quickView);
           return;
         }
@@ -3114,16 +3171,24 @@
         tab.addEventListener('click', () => {
           state.activeView = tab.getAttribute('data-view');
           state.quickView = null;
+          saveNavState();
           renderMainView();
         });
       });
 
       document.querySelectorAll('.nav-item[data-quick]').forEach((btn) => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', async () => {
           state.quickView = btn.getAttribute('data-quick');
+          saveNavState();
           renderSidebar();
-          renderMainView();
           closeMobileSidebar();
+          const allIds = state.folders.map((f) => f.id);
+          if (allIds.some((id) => !state.folderContents[id])) {
+            showSyncStatus('Lade alle Projekte für die Übersicht…', true);
+            await ensureFoldersLoaded(allIds);
+            showSyncStatus('', false);
+          }
+          renderMainView();
         });
       });
 
