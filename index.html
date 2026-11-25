@@ -4139,6 +4139,7 @@
                         ${escapeHtml(entry.ref.category || 'Allgemein')}${entry.folderId !== folderId ? ` · 📁 ${escapeHtml(entry.folderName)}` : ''}
                       </div>
                     </div>
+                    <button class="btn-icon" data-todo-edit="1" type="button" title="Bearbeiten">✎</button>
                     <button class="btn-icon" data-todo-del="1" type="button" title="Löschen">🗑</button>
                   </div>
                 `).join('')
@@ -4168,6 +4169,15 @@
             if (!todo) return;
             row.querySelector('[data-todo-toggle]').addEventListener('change', (e) => {
               todo.done = e.target.checked;
+              scheduleBoardSave(fId);
+              renderPlanningView(container, statsEl, folderId, 'todos');
+            });
+            row.querySelector('[data-todo-edit]').addEventListener('click', () => {
+              const nextText = prompt('Aufgabe bearbeiten:', todo.text);
+              if (nextText === null || !nextText.trim()) return;
+              const nextCat = prompt('Bereich / Kategorie:', todo.category || 'Allgemein');
+              todo.text = nextText.trim();
+              if (nextCat !== null) todo.category = nextCat.trim() || 'Allgemein';
               scheduleBoardSave(fId);
               renderPlanningView(container, statsEl, folderId, 'todos');
             });
