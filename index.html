@@ -1568,7 +1568,8 @@
         <button id="addGlobalTagBtn" class="btn btn-oak btn-sm" type="button">＋ Hinzufügen</button>
       </div>
       <div id="globalTagsList" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
-      <div class="modal-footer">
+      <div class="modal-footer" style="justify-content:space-between;">
+        <button id="resetDefaultTagsBtn" class="btn btn-sm" type="button" title="Ersetzt die Liste durch die Standard-Tags">Standard-Liste laden</button>
         <button class="btn btn-primary" data-close-modal="tagsManagerModal" type="button">Fertig</button>
       </div>
     </div>
@@ -1626,7 +1627,7 @@
         canvasSplitOpen: false,
         shopFilter: 'all',
         todoFilter: 'Alle',
-        globalTags: ['Christbaum', 'Tischdeko', 'Beleuchtung', 'Möbel', 'Textilien', 'Keramik', 'Holz', 'Glas', 'Metall', 'Naturmaterial'],
+        globalTags: ['Basteln', 'Material', 'Deko', 'Inspiration', 'Weihnachten', 'Dekoobjekt', 'Verpackung', 'Möbel', 'Tischdeko', 'Trockenblume', 'Streudeko', 'Karte', 'Ostern', 'Christbaum', 'Vase', 'Kuchen', 'Rezept', 'Winter', 'Dekobasis', 'Kerzenhalter', 'Outdoor', 'Kerze', 'Plätzchen', 'Sommer', 'Frühling', 'Herbst', 'Pflanzen'],
         tagsFileId: null,
         activeTagFilters: new Set(),
         editingItemTags: new Set()
@@ -4753,6 +4754,14 @@
       document.getElementById('addGlobalTagBtn').addEventListener('click', addGlobalTagFromInput);
       document.getElementById('newGlobalTagInput').addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); addGlobalTagFromInput(); }
+      });
+      document.getElementById('resetDefaultTagsBtn').addEventListener('click', async () => {
+        if (!confirm('Tag-Liste durch die aktuelle Standard-Liste ersetzen?')) return;
+        state.globalTags = ['Basteln', 'Material', 'Deko', 'Inspiration', 'Weihnachten', 'Dekoobjekt', 'Verpackung', 'Möbel', 'Tischdeko', 'Trockenblume', 'Streudeko', 'Karte', 'Ostern', 'Christbaum', 'Vase', 'Kuchen', 'Rezept', 'Winter', 'Dekobasis', 'Kerzenhalter', 'Outdoor', 'Kerze', 'Plätzchen', 'Sommer', 'Frühling', 'Herbst', 'Pflanzen'];
+        state.activeTagFilters.clear();
+        await saveGlobalTags();
+        renderGlobalTagsManager();
+        renderMainView();
       });
 
       // Init
