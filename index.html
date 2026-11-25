@@ -4280,6 +4280,7 @@
                     <option value="ordered" ${entry.status === 'ordered' ? 'selected' : ''}>Bestellt</option>
                     <option value="bought" ${entry.status === 'bought' ? 'selected' : ''}>Gekauft</option>
                   </select>
+                  <button class="btn-icon" data-edit-shop="1" type="button" title="Titel &amp; Link bearbeiten">✎</button>
                   <button class="btn-icon" data-remove-shop="1" type="button" title="Von Einkaufsliste entfernen">✕</button>
                 </div>
               `).join('')
@@ -4336,6 +4337,20 @@
               scheduleBoardSave(fId);
               renderPlanningView(container, statsEl, folderId, 'budget');
             });
+          });
+
+          row.querySelector('[data-edit-shop]').addEventListener('click', () => {
+            if (kind === 'item') {
+              openItemModal(entry.ref);
+            } else {
+              const nextTitle = prompt('Bezeichnung bearbeiten:', entry.ref.title);
+              if (nextTitle === null || !nextTitle.trim()) return;
+              const nextUrl = prompt('Shop-Link / URL (optional):', entry.ref.url || '');
+              entry.ref.title = nextTitle.trim();
+              if (nextUrl !== null) entry.ref.url = nextUrl.trim();
+              scheduleBoardSave(fId);
+              renderPlanningView(container, statsEl, folderId, 'budget');
+            }
           });
 
           row.querySelector('[data-remove-shop]').addEventListener('click', () => {
