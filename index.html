@@ -3176,15 +3176,7 @@
         const visualItems = (content.board.items || []).filter((it) => it.type === 'image' || it.previewImageUrl);
         statsEl.textContent = `${visualItems.length} Bilder auf dem Canvas`;
 
-        document.addEventListener('click', () => {
-        if (state.tagDropdownOpen) {
-          state.tagDropdownOpen = false;
-          const pop = document.getElementById('tagFilterPopover');
-          if (pop) pop.classList.add('hidden');
-        }
-      });
-
-      // Initiale Positionen vergeben, falls noch keine Canvas-Koordinaten existieren
+        // Initiale Positionen vergeben, falls noch keine Canvas-Koordinaten existieren
         let changed = false;
         visualItems.forEach((item, idx) => {
           if (!item.canvas) {
