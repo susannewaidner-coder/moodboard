@@ -1369,7 +1369,10 @@
       </div>
 
       <div class="sidebar-footer">
-        <div id="authStatusText">Nicht verbunden</div>
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
+          <div id="authStatusText">Nicht verbunden</div>
+          <span id="appVersionBadge" style="font-size:0.72rem; color:var(--text-muted); font-family:monospace;"></span>
+        </div>
         <div style="display:flex; gap:6px; flex-wrap:wrap;">
           <button id="authActionBtn" class="btn btn-primary btn-sm" type="button">Mit Google verbinden</button>
           <button id="openSettingsBtn" class="btn btn-sm" type="button">⚙️</button>
@@ -1689,6 +1692,7 @@
       /* ========================================================================
          1. KONFIGURATION & STATE
          ======================================================================== */
+      const APP_VERSION = 'v1.0.1';
       const LS_KEYS = {
         clientId: 'mb_oauth_client_id',
         rootName: 'mb_root_folder_name',
@@ -5180,6 +5184,8 @@
       });
 
       // Init
+      const verEl = document.getElementById('appVersionBadge');
+      if (verEl) verEl.textContent = APP_VERSION;
       applyTheme(localStorage.getItem(LS_KEYS.theme) || 'day');
       if (localStorage.getItem(LS_KEYS.demoMode) === '1') {
         startDemoMode();
