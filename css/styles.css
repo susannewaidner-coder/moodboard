@@ -254,14 +254,19 @@
 
     .tree-actions {
       position: relative;
-      display: none;
+      display: inline-flex;
       gap: 2px;
+      flex-shrink: 0;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.12s ease;
     }
 
     .tree-row:hover .tree-actions,
     .tree-row.active .tree-actions,
     .tree-actions.open {
-      display: inline-flex;
+      opacity: 1;
+      pointer-events: auto;
     }
 
     .tree-menu-popover {
