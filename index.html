@@ -1101,6 +1101,145 @@
       border-radius: var(--radius-md);
       padding: 14px;
     }
+
+    /* ==========================================================================
+       9. PHASE 3: PLANUNG, EINKAUFSLISTE, BUDGET & SPLIT-VIEW
+       ========================================================================== */
+    .budget-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .budget-stat {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 14px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .budget-stat-label {
+      font-size: 0.74rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    .budget-stat-val {
+      font-size: 1.35rem;
+      font-weight: 700;
+      margin-top: 4px;
+    }
+
+    .budget-stat-val.over {
+      color: var(--danger);
+    }
+
+    .progress-track {
+      height: 8px;
+      background-color: var(--card-subtle);
+      border-radius: var(--radius-pill);
+      overflow: hidden;
+      border: 1px solid var(--border-color);
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent-sage), var(--accent-fir));
+      transition: width 0.25s ease;
+    }
+
+    .progress-fill.over {
+      background: var(--danger);
+    }
+
+    .planning-columns {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 20px;
+      align-items: start;
+    }
+
+    .planning-card {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 18px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .shop-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .shop-row:last-child {
+      border-bottom: none;
+    }
+
+    .shop-thumb {
+      width: 44px;
+      height: 44px;
+      border-radius: var(--radius-sm);
+      object-fit: cover;
+      background-color: var(--card-subtle);
+      flex-shrink: 0;
+    }
+
+    .todo-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 6px;
+      border-radius: var(--radius-sm);
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .todo-row.done .todo-text {
+      text-decoration: line-through;
+      color: var(--text-muted);
+    }
+
+    .price-badge {
+      position: absolute;
+      bottom: 8px;
+      right: 8px;
+      padding: 3px 8px;
+      border-radius: var(--radius-pill);
+      background-color: var(--accent-fir);
+      color: #FFFFFF;
+      font-size: 0.72rem;
+      font-weight: 600;
+    }
+
+    .canvas-split-layout {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+
+    @media (min-width: 960px) {
+      .canvas-split-layout.with-split {
+        grid-template-columns: 1fr 340px;
+      }
+    }
+
+    .split-panel {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 14px;
+      max-height: 70vh;
+      overflow-y: auto;
+      box-shadow: var(--shadow-sm);
+    }
   </style>
 </head>
 <body>
@@ -1285,6 +1424,31 @@
         <input id="itemTagsInput" class="form-control" type="text" placeholder="salbei, kerze, esstisch" />
       </div>
 
+      <div style="border-top:1px solid var(--border-color); padding-top:12px; margin-top:12px;">
+        <label style="display:flex; align-items:center; gap:8px; font-weight:600; font-size:0.86rem; cursor:pointer; margin-bottom:10px;">
+          <input id="itemShopEnabled" type="checkbox" />
+          <span>🛒 Auf die Einkaufsliste setzen</span>
+        </label>
+        <div id="itemShopFields" style="display:grid; grid-template-columns: 1fr 80px 1fr; gap:8px;">
+          <div>
+            <label class="form-label" for="itemShopPrice">Preis (€)</label>
+            <input id="itemShopPrice" class="form-control" type="number" step="0.01" min="0" placeholder="0.00" />
+          </div>
+          <div>
+            <label class="form-label" for="itemShopQty">Menge</label>
+            <input id="itemShopQty" class="form-control" type="number" min="1" value="1" />
+          </div>
+          <div>
+            <label class="form-label" for="itemShopStatus">Status</label>
+            <select id="itemShopStatus" class="form-control">
+              <option value="idea">Idee</option>
+              <option value="ordered">Bestellt</option>
+              <option value="bought">Gekauft</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
       <div class="modal-footer">
         <button class="btn" data-close-modal="itemModal" type="button">Abbrechen</button>
         <button id="saveItemBtn" class="btn btn-primary" type="button">Speichern</button>
@@ -1421,7 +1585,10 @@
         selectedCanvasIds: new Set(),
         homeEditMode: false,
         homeActiveZoneId: null,
-        eyedropperPickedHex: '#C59B6D'
+        eyedropperPickedHex: '#C59B6D',
+        canvasSplitOpen: false,
+        shopFilter: 'all',
+        todoFilter: 'Alle'
       };
 
       /* ========================================================================
@@ -2096,6 +2263,13 @@
           return;
         }
 
+        if (state.quickView === 'shopping' || state.quickView === 'todos') {
+          breadEl.textContent = 'Schnellsicht';
+          titleEl.textContent = state.quickView === 'shopping' ? 'Globale Einkaufsliste' : 'Alle offenen To-dos';
+          renderGlobalQuickView(container, statsEl, state.quickView);
+          return;
+        }
+
         if (!state.activeFolderId || !state.folderContents[state.activeFolderId]) {
           breadEl.textContent = 'Moodboards';
           titleEl.textContent = 'Kein Ordner ausgewählt';
@@ -2122,13 +2296,7 @@
         } else if (state.activeView === 'home') {
           renderProjectHomeView(container, statsEl, state.activeFolderId);
         } else {
-          statsEl.textContent = '';
-          container.innerHTML = `
-            <div class="phase-placeholder">
-              <h3 style="margin-top:0; color:var(--text-primary);">To-dos, Einkaufsliste &amp; Budget-Planung (Phase 3)</h3>
-              <p>Dieser Bereich wird in Phase 3 aktiviert. Alle in Phase 1 &amp; 2 gesammelten Bilder, Bookmarks und Swatches stehen dort automatisch bereit.</p>
-            </div>
-          `;
+          renderPlanningView(container, statsEl, state.activeFolderId);
         }
       }
 
@@ -2220,6 +2388,7 @@
         const thumbSrc = item.type === 'image'
           ? (item.localDataUrl || '')
           : (item.previewImageUrl || '');
+        const shop = item.shopping && item.shopping.enabled ? item.shopping : null;
 
         return `
           <article class="item-card" data-item-id="${item.id}">
@@ -2231,6 +2400,7 @@
                     : `<div class="doc-icon-box"><span>🔗</span><span class="doc-icon-label">Web-Link</span></div>`)
               }
               <span class="item-type-badge">${badge}</span>
+              ${shop ? `<span class="price-badge">${Number(shop.price || 0).toFixed(2)} €</span>` : ''}
             </div>
             <div class="item-body">
               <div>
@@ -2241,6 +2411,7 @@
               <div class="item-meta">
                 <span>${tagsHtml || (item.url || item.sourceUrl ? 'Link gespeichert' : '')}</span>
                 <div class="item-actions">
+                  <button class="btn-icon" data-toggle-shop="${item.id}" type="button" title="Auf Einkaufsliste setzen/entfernen" style="${shop ? 'color:var(--accent-fir); font-weight:700;' : ''}">🛒</button>
                   ${(item.url || item.sourceUrl) ? `<a class="btn-icon" href="${escapeHtml(item.url || item.sourceUrl)}" target="_blank" rel="noopener" title="Link öffnen">↗</a>` : ''}
                   <button class="btn-icon" data-edit-item="${item.id}" type="button" title="Bearbeiten">✎</button>
                   <button class="btn-icon" data-delete-item="${item.id}" type="button" title="Löschen">🗑</button>
@@ -2315,12 +2486,30 @@
         container.querySelectorAll('[data-delete-item]').forEach((btn) => {
           btn.addEventListener('click', () => deleteItemById(btn.getAttribute('data-delete-item'), folderId));
         });
+
+        container.querySelectorAll('[data-toggle-shop]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-toggle-shop');
+            const found = findItemWithFolder(id);
+            if (!found) return;
+            const { item, fId } = found;
+            if (!item.shopping) item.shopping = { enabled: false, price: 0, quantity: 1, status: 'idea' };
+            item.shopping.enabled = !item.shopping.enabled;
+            scheduleBoardSave(fId);
+            renderMainView();
+          });
+        });
       }
 
       function findItemById(itemId) {
-        for (const data of Object.values(state.folderContents)) {
+        const res = findItemWithFolder(itemId);
+        return res ? res.item : null;
+      }
+
+      function findItemWithFolder(itemId) {
+        for (const [fId, data] of Object.entries(state.folderContents)) {
           const found = (data.board.items || []).find((i) => i.id === itemId);
-          if (found) return found;
+          if (found) return { item: found, fId };
         }
         return null;
       }
@@ -2443,6 +2632,11 @@
         document.getElementById('itemNoteInput').value = item ? (item.note || '') : '';
         document.getElementById('itemTagsInput').value = item ? (item.tags || []).join(', ') : '';
         document.getElementById('itemPreviewGroup').style.display = isBookmark ? 'block' : 'none';
+        const shop = item && item.shopping ? item.shopping : { enabled: false, price: '', quantity: 1, status: 'idea' };
+        document.getElementById('itemShopEnabled').checked = !!shop.enabled;
+        document.getElementById('itemShopPrice').value = shop.price || '';
+        document.getElementById('itemShopQty').value = shop.quantity || 1;
+        document.getElementById('itemShopStatus').value = shop.status || 'idea';
         openModal('itemModal');
       }
 
@@ -2548,6 +2742,12 @@
         const previewImageUrl = document.getElementById('itemPreviewInput').value.trim();
         const note = document.getElementById('itemNoteInput').value.trim();
         const tags = document.getElementById('itemTagsInput').value.split(',').map((t) => t.trim()).filter(Boolean);
+        const shopping = {
+          enabled: document.getElementById('itemShopEnabled').checked,
+          price: Math.max(0, parseFloat(document.getElementById('itemShopPrice').value) || 0),
+          quantity: Math.max(1, parseInt(document.getElementById('itemShopQty').value, 10) || 1),
+          status: document.getElementById('itemShopStatus').value || 'idea'
+        };
 
         if (state.editingItem) {
           state.editingItem.title = title || 'Ohne Titel';
@@ -2558,7 +2758,9 @@
           }
           state.editingItem.note = note;
           state.editingItem.tags = tags;
-          scheduleBoardSave(state.activeFolderId);
+          state.editingItem.shopping = shopping;
+          const found = findItemWithFolder(state.editingItem.id);
+          scheduleBoardSave(found ? found.fId : state.activeFolderId);
         } else {
           if (!url) { alert('Bitte gib eine URL ein.'); return; }
           const content = state.folderContents[state.activeFolderId];
@@ -2569,7 +2771,8 @@
             previewImageUrl,
             title: title || url,
             note,
-            tags
+            tags,
+            shopping
           });
           scheduleBoardSave(state.activeFolderId);
         }
@@ -2601,19 +2804,10 @@
 
       document.querySelectorAll('.nav-item[data-quick]').forEach((btn) => {
         btn.addEventListener('click', () => {
-          const q = btn.getAttribute('data-quick');
-          if (q === 'all') {
-            state.quickView = 'all';
-            renderSidebar();
-            renderMainView();
-            closeMobileSidebar();
-          } else {
-            state.quickView = null;
-            state.activeView = 'planning';
-            renderSidebar();
-            renderMainView();
-            closeMobileSidebar();
-          }
+          state.quickView = btn.getAttribute('data-quick');
+          renderSidebar();
+          renderMainView();
+          closeMobileSidebar();
         });
       });
 
@@ -2699,29 +2893,35 @@
               <button id="canvasLockBtn" class="btn btn-sm ${state.canvasLocked ? 'btn-oak' : ''}" type="button">
                 ${state.canvasLocked ? '🔒 Gesperrt' : '🔓 Frei verschieben'}
               </button>
+              <button id="canvasSplitBtn" class="btn btn-sm ${state.canvasSplitOpen ? 'btn-primary' : ''}" type="button">
+                📋 Planung
+              </button>
             </div>
             <div id="canvasPaletteBar" class="canvas-palette-bar">
               <span style="font-size:0.76rem; color:var(--text-muted);">Farbpalette lädt…</span>
             </div>
           </div>
 
-          <div id="canvasViewport" class="canvas-viewport">
-            <div id="canvasStage" class="canvas-stage" style="transform: translate(${state.canvasPanX}px, ${state.canvasPanY}px) scale(${state.canvasZoom});">
-              ${visualItems.map((item) => {
-                const c = item.canvas;
-                const isSelected = state.selectedCanvasIds.has(item.id);
-                const src = item.localDataUrl || item.previewImageUrl || '';
-                return `
-                  <div class="canvas-item ${isSelected ? 'selected' : ''}"
-                       data-canvas-id="${item.id}"
-                       style="left:${c.x}px; top:${c.y}px; width:${c.w}px; height:${c.h}px; z-index:${c.z || 1};">
-                    <img src="${escapeHtml(src)}" alt="${escapeHtml(item.title)}" data-drive-img="${item.driveFileId || ''}" />
-                    <div class="canvas-item-label">${escapeHtml(item.title || 'Bild')}</div>
-                    ${state.canvasLocked ? '' : '<div class="canvas-resize-handle" data-resize-handle="1"></div>'}
-                  </div>
-                `;
-              }).join('')}
+          <div class="canvas-split-layout ${state.canvasSplitOpen ? 'with-split' : ''}">
+            <div id="canvasViewport" class="canvas-viewport">
+              <div id="canvasStage" class="canvas-stage" style="transform: translate(${state.canvasPanX}px, ${state.canvasPanY}px) scale(${state.canvasZoom});">
+                ${visualItems.map((item) => {
+                  const c = item.canvas;
+                  const isSelected = state.selectedCanvasIds.has(item.id);
+                  const src = item.localDataUrl || item.previewImageUrl || '';
+                  return `
+                    <div class="canvas-item ${isSelected ? 'selected' : ''}"
+                         data-canvas-id="${item.id}"
+                         style="left:${c.x}px; top:${c.y}px; width:${c.w}px; height:${c.h}px; z-index:${c.z || 1};">
+                      <img src="${escapeHtml(src)}" alt="${escapeHtml(item.title)}" data-drive-img="${item.driveFileId || ''}" />
+                      <div class="canvas-item-label">${escapeHtml(item.title || 'Bild')}</div>
+                      ${state.canvasLocked ? '' : '<div class="canvas-resize-handle" data-resize-handle="1"></div>'}
+                    </div>
+                  `;
+                }).join('')}
+              </div>
             </div>
+            ${state.canvasSplitOpen ? '<aside id="canvasSplitPanel" class="split-panel"></aside>' : ''}
           </div>
         `;
 
@@ -2809,6 +3009,14 @@
           state.canvasLocked = !state.canvasLocked;
           renderCanvasView(container, statsEl, folderId);
         });
+        document.getElementById('canvasSplitBtn').addEventListener('click', () => {
+          state.canvasSplitOpen = !state.canvasSplitOpen;
+          renderCanvasView(container, statsEl, folderId);
+        });
+        if (state.canvasSplitOpen) {
+          const splitEl = document.getElementById('canvasSplitPanel');
+          if (splitEl) renderSplitPlanningPanel(splitEl, folderId);
+        }
 
         // Pointer-Interaktion (Drag, Resize, Pan)
         let activeAction = null;
@@ -3318,6 +3526,498 @@
           alert('Ungültiges JSON: ' + err.message);
         }
       });
+
+      /* ========================================================================
+         16. PHASE 3: TO-DOS, EINKAUFSLISTE, BUDGET & SPLIT-VIEW
+         ======================================================================== */
+      function getSubtreeFolderIds(rootId) {
+        const result = [rootId];
+        const queue = [rootId];
+        while (queue.length > 0) {
+          const pid = queue.shift();
+          const children = state.folders.filter((f) => (f.parents || []).includes(pid));
+          for (const ch of children) {
+            result.push(ch.id);
+            queue.push(ch.id);
+          }
+        }
+        return result;
+      }
+
+      async function ensureFoldersLoaded(folderIds) {
+        for (const fId of folderIds) {
+          if (state.folderContents[fId]) continue;
+          if (state.mode === 'demo') {
+            const demo = DemoAdapter.load();
+            const f = demo.folders.find((x) => x.id === fId);
+            state.folderContents[fId] = {
+              board: demo.boards[fId] || createDefaultBoard(f ? f.name : 'Ordner'),
+              boardFileId: null,
+              modifiedTime: null,
+              driveFiles: []
+            };
+          } else if (state.mode === 'drive' && state.accessToken) {
+            try {
+              const files = await DriveAdapter.listFolderFiles(fId);
+              const boardFile = files.find((f) => f.name === 'board.json');
+              const f = state.folders.find((x) => x.id === fId);
+              const board = boardFile ? await DriveAdapter.downloadJson(boardFile.id) : createDefaultBoard(f ? f.name : 'Projekt');
+              state.folderContents[fId] = {
+                board,
+                boardFileId: boardFile ? boardFile.id : null,
+                modifiedTime: boardFile ? boardFile.modifiedTime : null,
+                driveFiles: files.filter((x) => x.name !== 'board.json')
+              };
+            } catch (e) {
+              console.warn('Unterordner konnte nicht geladen werden:', fId, e);
+            }
+          }
+        }
+      }
+
+      function collectPlanningData(folderId, includeSubfolders) {
+        const ids = includeSubfolders ? getSubtreeFolderIds(folderId) : [folderId];
+        const shoppingEntries = [];
+        const todoEntries = [];
+
+        for (const fId of ids) {
+          const content = state.folderContents[fId];
+          if (!content) continue;
+          const folder = state.folders.find((f) => f.id === fId);
+          const fName = folder ? folder.name : 'Ordner';
+
+          // Verknüpfte Bilder / Bookmarks
+          for (const item of (content.board.items || [])) {
+            if (item.shopping && item.shopping.enabled) {
+              shoppingEntries.push({
+                kind: 'item',
+                folderId: fId,
+                folderName: fName,
+                id: item.id,
+                title: item.title || 'Ohne Titel',
+                url: item.url || item.sourceUrl || '',
+                thumbUrl: item.localDataUrl || item.previewImageUrl || '',
+                driveFileId: item.driveFileId || '',
+                price: Number(item.shopping.price || 0),
+                quantity: Number(item.shopping.quantity || 1),
+                status: item.shopping.status || 'idea',
+                ref: item
+              });
+            }
+          }
+
+          // Freie Text-Einkaufsposten
+          for (const mItem of (content.board.manualShoppingItems || [])) {
+            shoppingEntries.push({
+              kind: 'manual',
+              folderId: fId,
+              folderName: fName,
+              id: mItem.id,
+              title: mItem.title,
+              url: mItem.url || '',
+              thumbUrl: '',
+              driveFileId: '',
+              price: Number(mItem.price || 0),
+              quantity: Number(mItem.quantity || 1),
+              status: mItem.status || 'idea',
+              ref: mItem
+            });
+          }
+
+          // To-dos
+          for (const td of (content.board.todos || [])) {
+            todoEntries.push({ folderId: fId, folderName: fName, ref: td });
+          }
+        }
+
+        const planned = shoppingEntries.reduce((sum, e) => sum + e.price * e.quantity, 0);
+        const spent = shoppingEntries.filter((e) => e.status === 'bought').reduce((sum, e) => sum + e.price * e.quantity, 0);
+        return { shoppingEntries, todoEntries, planned, spent };
+      }
+
+      async function renderPlanningView(container, statsEl, folderId) {
+        const content = state.folderContents[folderId];
+        if (!content.board.budget) content.board.budget = { limit: 0, currency: 'EUR', includeSubfolders: true };
+        if (!Array.isArray(content.board.manualShoppingItems)) content.board.manualShoppingItems = [];
+        if (!Array.isArray(content.board.todos)) content.board.todos = [];
+
+        const budget = content.board.budget;
+        const subtreeIds = getSubtreeFolderIds(folderId);
+        if (budget.includeSubfolders && subtreeIds.some((id) => !state.folderContents[id])) {
+          await ensureFoldersLoaded(subtreeIds);
+        }
+
+        const { shoppingEntries, todoEntries, planned, spent } = collectPlanningData(folderId, budget.includeSubfolders);
+        const limit = Number(budget.limit || 0);
+        const remaining = limit - planned;
+        const pct = limit > 0 ? Math.min(100, Math.round((planned / limit) * 100)) : 0;
+
+        statsEl.textContent = `${shoppingEntries.length} Einkaufsposten · ${todoEntries.filter((t) => !t.ref.done).length} offene To-dos`;
+
+        const visibleShop = state.shopFilter === 'all'
+          ? shoppingEntries
+          : shoppingEntries.filter((e) => e.status === state.shopFilter);
+
+        const todoCats = ['Alle', ...Array.from(new Set(todoEntries.map((t) => t.ref.category || 'Allgemein')))];
+        const visibleTodos = state.todoFilter === 'Alle'
+          ? todoEntries
+          : todoEntries.filter((t) => (t.ref.category || 'Allgemein') === state.todoFilter);
+        const doneTodos = todoEntries.filter((t) => t.ref.done).length;
+        const todoPct = todoEntries.length > 0 ? Math.round((doneTodos / todoEntries.length) * 100) : 0;
+
+        container.innerHTML = `
+          <!-- Budget-Übersicht -->
+          <section class="planning-card" style="margin-bottom:20px;">
+            <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px;">
+              <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                <strong style="font-size:1.05rem;">💶 Budget-Rechner</strong>
+                <label style="display:inline-flex; align-items:center; gap:6px; font-size:0.82rem; color:var(--text-secondary);">
+                  Limit (€):
+                  <input id="budgetLimitInput" class="form-control" type="number" min="0" step="10" value="${limit}" style="width:110px; padding:5px 8px;" />
+                </label>
+              </div>
+              <label style="display:inline-flex; align-items:center; gap:6px; font-size:0.84rem; cursor:pointer;">
+                <input id="budgetIncludeSubCb" type="checkbox" ${budget.includeSubfolders ? 'checked' : ''} />
+                <span>Unterordner mit einrechnen (${subtreeIds.length - 1})</span>
+              </label>
+            </div>
+
+            <div class="budget-grid">
+              <div class="budget-stat">
+                <div class="budget-stat-label">Budget-Limit</div>
+                <div class="budget-stat-val">${limit.toFixed(2)} €</div>
+              </div>
+              <div class="budget-stat">
+                <div class="budget-stat-label">Verplant (Gesamt)</div>
+                <div class="budget-stat-val">${planned.toFixed(2)} €</div>
+              </div>
+              <div class="budget-stat">
+                <div class="budget-stat-label">Ausgegeben (Gekauft)</div>
+                <div class="budget-stat-val">${spent.toFixed(2)} €</div>
+              </div>
+              <div class="budget-stat">
+                <div class="budget-stat-label">Restbudget</div>
+                <div class="budget-stat-val ${limit > 0 && remaining < 0 ? 'over' : ''}">
+                  ${limit > 0 ? remaining.toFixed(2) + ' €' : '—'}
+                </div>
+              </div>
+            </div>
+
+            ${limit > 0 ? `
+              <div class="progress-track">
+                <div class="progress-fill ${remaining < 0 ? 'over' : ''}" style="width:${pct}%;"></div>
+              </div>
+            ` : ''}
+          </section>
+
+          <div class="planning-columns">
+            <!-- Einkaufsliste -->
+            <section class="planning-card">
+              <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; margin-bottom:12px;">
+                <h3 style="margin:0; font-size:1.05rem;">🛒 Einkaufsliste</h3>
+                <div class="pill-group">
+                  <button class="pill-btn ${state.shopFilter === 'all' ? 'active' : ''}" data-sfilter="all" type="button">Alle</button>
+                  <button class="pill-btn ${state.shopFilter === 'idea' ? 'active' : ''}" data-sfilter="idea" type="button">Idee</button>
+                  <button class="pill-btn ${state.shopFilter === 'ordered' ? 'active' : ''}" data-sfilter="ordered" type="button">Bestellt</button>
+                  <button class="pill-btn ${state.shopFilter === 'bought' ? 'active' : ''}" data-sfilter="bought" type="button">Gekauft</button>
+                </div>
+              </div>
+
+              <div style="display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap;">
+                <input id="manualShopTitle" class="form-control" type="text" placeholder="Freier Posten (z. B. Servietten)" style="flex:1; min-width:140px;" />
+                <input id="manualShopPrice" class="form-control" type="number" step="0.01" min="0" placeholder="€" style="width:80px;" />
+                <button id="addManualShopBtn" class="btn btn-oak btn-sm" type="button">＋</button>
+              </div>
+
+              ${visibleShop.length === 0
+                ? '<p style="font-size:0.85rem; color:var(--text-muted); margin:0;">Noch keine Posten in dieser Ansicht. Klicke in der Galerie bei einem Bild/Bookmark auf „🛒“ oder füge oben einen Posten hinzu.</p>'
+                : visibleShop.map((entry) => `
+                  <div class="shop-row" data-shop-kind="${entry.kind}" data-shop-id="${entry.id}" data-shop-folder="${entry.folderId}">
+                    ${entry.thumbUrl || entry.driveFileId
+                      ? `<img class="shop-thumb" src="${escapeHtml(entry.thumbUrl)}" data-drive-img="${entry.driveFileId}" alt="" />`
+                      : '<div class="shop-thumb" style="display:flex; align-items:center; justify-content:center;">🛍️</div>'}
+                    <div style="flex:1; min-width:0;">
+                      <div style="font-size:0.88rem; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                        ${escapeHtml(entry.title)}
+                        ${entry.url ? `<a href="${escapeHtml(entry.url)}" target="_blank" rel="noopener" title="Shop-Link öffnen">↗</a>` : ''}
+                      </div>
+                      <div style="font-size:0.74rem; color:var(--text-muted);">
+                        ${entry.folderId !== folderId ? `📁 ${escapeHtml(entry.folderName)} · ` : ''}${(entry.price * entry.quantity).toFixed(2)} € gesamt
+                      </div>
+                    </div>
+                    <input class="form-control" data-shop-field="price" type="number" step="0.01" min="0" value="${entry.price}" style="width:74px; padding:4px 6px; font-size:0.8rem;" title="Einzelpreis (€)" />
+                    <input class="form-control" data-shop-field="quantity" type="number" min="1" value="${entry.quantity}" style="width:52px; padding:4px 6px; font-size:0.8rem;" title="Menge" />
+                    <select class="form-control" data-shop-field="status" style="width:94px; padding:4px 6px; font-size:0.8rem;">
+                      <option value="idea" ${entry.status === 'idea' ? 'selected' : ''}>Idee</option>
+                      <option value="ordered" ${entry.status === 'ordered' ? 'selected' : ''}>Bestellt</option>
+                      <option value="bought" ${entry.status === 'bought' ? 'selected' : ''}>Gekauft</option>
+                    </select>
+                    <button class="btn-icon" data-remove-shop="1" type="button" title="Von Einkaufsliste entfernen">✕</button>
+                  </div>
+                `).join('')
+              }
+            </section>
+
+            <!-- To-do-Liste -->
+            <section class="planning-card">
+              <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px;">
+                <h3 style="margin:0; font-size:1.05rem;">☑️ To-do-Liste</h3>
+                <span style="font-size:0.8rem; color:var(--text-muted);">${doneTodos} / ${todoEntries.length} (${todoPct} %)</span>
+              </div>
+
+              <div class="progress-track" style="margin-bottom:12px;">
+                <div class="progress-fill" style="width:${todoPct}%;"></div>
+              </div>
+
+              <div class="pill-group" style="margin-bottom:12px; flex-wrap:wrap;">
+                ${todoCats.map((cat) => `
+                  <button class="pill-btn ${state.todoFilter === cat ? 'active' : ''}" data-tfilter="${escapeHtml(cat)}" type="button">${escapeHtml(cat)}</button>
+                `).join('')}
+              </div>
+
+              <div style="display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap;">
+                <input id="newTodoText" class="form-control" type="text" placeholder="Neue Aufgabe…" style="flex:1; min-width:150px;" />
+                <input id="newTodoCat" class="form-control" type="text" placeholder="Bereich/Kategorie" style="width:130px;" />
+                <button id="addTodoBtn" class="btn btn-primary btn-sm" type="button">＋</button>
+              </div>
+
+              ${visibleTodos.length === 0
+                ? '<p style="font-size:0.85rem; color:var(--text-muted); margin:0;">Keine Aufgaben in diesem Filter.</p>'
+                : visibleTodos.map((entry) => `
+                  <div class="todo-row ${entry.ref.done ? 'done' : ''}" data-todo-id="${entry.ref.id}" data-todo-folder="${entry.folderId}">
+                    <input type="checkbox" data-todo-toggle="1" ${entry.ref.done ? 'checked' : ''} />
+                    <div style="flex:1; min-width:0;">
+                      <div class="todo-text" style="font-size:0.88rem;">${escapeHtml(entry.ref.text)}</div>
+                      <div style="font-size:0.72rem; color:var(--text-muted);">
+                        ${escapeHtml(entry.ref.category || 'Allgemein')}${entry.folderId !== folderId ? ` · 📁 ${escapeHtml(entry.folderName)}` : ''}
+                      </div>
+                    </div>
+                    <button class="btn-icon" data-todo-del="1" type="button" title="Löschen">🗑</button>
+                  </div>
+                `).join('')
+              }
+            </section>
+          </div>
+        `;
+
+        // Drive-Thumbnails in Einkaufsliste nachladen
+        container.querySelectorAll('img[data-drive-img]').forEach(async (imgEl) => {
+          const fId = imgEl.getAttribute('data-drive-img');
+          if (!fId || state.mode !== 'drive') return;
+          try { imgEl.src = await DriveAdapter.fetchBlobUrl(fId); } catch (e) { console.warn(e); }
+        });
+
+        // Budget-Events
+        document.getElementById('budgetLimitInput').addEventListener('change', (e) => {
+          budget.limit = Math.max(0, parseFloat(e.target.value) || 0);
+          scheduleBoardSave(folderId);
+          renderPlanningView(container, statsEl, folderId);
+        });
+        document.getElementById('budgetIncludeSubCb').addEventListener('change', (e) => {
+          budget.includeSubfolders = e.target.checked;
+          scheduleBoardSave(folderId);
+          renderPlanningView(container, statsEl, folderId);
+        });
+
+        // Einkaufsliste Events
+        container.querySelectorAll('[data-sfilter]').forEach((b) => {
+          b.addEventListener('click', () => {
+            state.shopFilter = b.getAttribute('data-sfilter');
+            renderPlanningView(container, statsEl, folderId);
+          });
+        });
+
+        document.getElementById('addManualShopBtn').addEventListener('click', () => {
+          const title = document.getElementById('manualShopTitle').value.trim();
+          if (!title) return;
+          const price = Math.max(0, parseFloat(document.getElementById('manualShopPrice').value) || 0);
+          content.board.manualShoppingItems.push({ id: uid('ms'), title, price, quantity: 1, status: 'idea', url: '' });
+          scheduleBoardSave(folderId);
+          renderPlanningView(container, statsEl, folderId);
+        });
+
+        container.querySelectorAll('.shop-row').forEach((row) => {
+          const kind = row.getAttribute('data-shop-kind');
+          const id = row.getAttribute('data-shop-id');
+          const fId = row.getAttribute('data-shop-folder');
+          const entry = shoppingEntries.find((e) => e.id === id && e.folderId === fId);
+          if (!entry) return;
+
+          row.querySelectorAll('[data-shop-field]').forEach((inp) => {
+            inp.addEventListener('change', () => {
+              const field = inp.getAttribute('data-shop-field');
+              const val = field === 'status' ? inp.value : (field === 'quantity' ? Math.max(1, parseInt(inp.value, 10) || 1) : Math.max(0, parseFloat(inp.value) || 0));
+              if (kind === 'item') entry.ref.shopping[field] = val;
+              else entry.ref[field] = val;
+              scheduleBoardSave(fId);
+              renderPlanningView(container, statsEl, folderId);
+            });
+          });
+
+          row.querySelector('[data-remove-shop]').addEventListener('click', () => {
+            if (kind === 'item') {
+              entry.ref.shopping.enabled = false;
+            } else {
+              const fc = state.folderContents[fId];
+              fc.board.manualShoppingItems = fc.board.manualShoppingItems.filter((x) => x.id !== id);
+            }
+            scheduleBoardSave(fId);
+            renderPlanningView(container, statsEl, folderId);
+          });
+        });
+
+        // To-do Events
+        container.querySelectorAll('[data-tfilter]').forEach((b) => {
+          b.addEventListener('click', () => {
+            state.todoFilter = b.getAttribute('data-tfilter');
+            renderPlanningView(container, statsEl, folderId);
+          });
+        });
+
+        document.getElementById('addTodoBtn').addEventListener('click', () => {
+          const text = document.getElementById('newTodoText').value.trim();
+          if (!text) return;
+          const category = document.getElementById('newTodoCat').value.trim() || 'Allgemein';
+          content.board.todos.push({ id: uid('t'), text, done: false, category });
+          scheduleBoardSave(folderId);
+          renderPlanningView(container, statsEl, folderId);
+        });
+
+        container.querySelectorAll('.todo-row').forEach((row) => {
+          const id = row.getAttribute('data-todo-id');
+          const fId = row.getAttribute('data-todo-folder');
+          const fc = state.folderContents[fId];
+          const todo = fc.board.todos.find((t) => t.id === id);
+          if (!todo) return;
+
+          row.querySelector('[data-todo-toggle]').addEventListener('change', (e) => {
+            todo.done = e.target.checked;
+            scheduleBoardSave(fId);
+            renderPlanningView(container, statsEl, folderId);
+          });
+
+          row.querySelector('[data-todo-del]').addEventListener('click', () => {
+            fc.board.todos = fc.board.todos.filter((t) => t.id !== id);
+            scheduleBoardSave(fId);
+            renderPlanningView(container, statsEl, folderId);
+          });
+        });
+      }
+
+      function renderGlobalQuickView(container, statsEl, type) {
+        const allFolders = Object.keys(state.folderContents);
+        if (allFolders.length === 0) {
+          container.innerHTML = '<div class="phase-placeholder">Öffne zuerst einen oder mehrere Projektordner, um die globale Übersicht zu sehen.</div>';
+          return;
+        }
+
+        if (type === 'shopping') {
+          const rows = [];
+          for (const fId of allFolders) {
+            const { shoppingEntries } = collectPlanningData(fId, false);
+            rows.push(...shoppingEntries);
+          }
+          const total = rows.reduce((s, r) => s + r.price * r.quantity, 0);
+          statsEl.textContent = `${rows.length} Posten · Gesamt: ${total.toFixed(2)} €`;
+          if (rows.length === 0) {
+            container.innerHTML = '<div class="phase-placeholder">Noch keine Einkaufsposten in den geladenen Ordnern.</div>';
+            return;
+          }
+          container.innerHTML = `
+            <div class="planning-card">
+              ${rows.map((r) => `
+                <div class="shop-row">
+                  <div style="flex:1;">
+                    <strong>${escapeHtml(r.title)}</strong>
+                    ${r.url ? `<a href="${escapeHtml(r.url)}" target="_blank" rel="noopener">↗</a>` : ''}
+                    <div style="font-size:0.76rem; color:var(--text-muted);">📁 ${escapeHtml(r.folderName)} · Status: ${escapeHtml(r.status)}</div>
+                  </div>
+                  <div style="font-weight:600;">${(r.price * r.quantity).toFixed(2)} € (${r.quantity}×)</div>
+                </div>
+              `).join('')}
+            </div>
+          `;
+        } else {
+          const openTodos = [];
+          for (const fId of allFolders) {
+            const { todoEntries } = collectPlanningData(fId, false);
+            openTodos.push(...todoEntries.filter((t) => !t.ref.done));
+          }
+          statsEl.textContent = `${openTodos.length} offene Aufgaben`;
+          if (openTodos.length === 0) {
+            container.innerHTML = '<div class="phase-placeholder">Alle Aufgaben in den geladenen Ordnern sind erledigt!</div>';
+            return;
+          }
+          container.innerHTML = `
+            <div class="planning-card">
+              ${openTodos.map((t) => `
+                <div class="todo-row">
+                  <input type="checkbox" data-qt-id="${t.ref.id}" data-qt-folder="${t.folderId}" />
+                  <div style="flex:1;">
+                    <div class="todo-text">${escapeHtml(t.ref.text)}</div>
+                    <div style="font-size:0.74rem; color:var(--text-muted);">📁 ${escapeHtml(t.folderName)} · ${escapeHtml(t.ref.category || 'Allgemein')}</div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          `;
+          container.querySelectorAll('[data-qt-id]').forEach((cb) => {
+            cb.addEventListener('change', () => {
+              const fc = state.folderContents[cb.getAttribute('data-qt-folder')];
+              const td = fc.board.todos.find((x) => x.id === cb.getAttribute('data-qt-id'));
+              if (td) {
+                td.done = cb.checked;
+                scheduleBoardSave(cb.getAttribute('data-qt-folder'));
+                renderGlobalQuickView(container, statsEl, 'todos');
+              }
+            });
+          });
+        }
+      }
+
+      function renderSplitPlanningPanel(panelEl, folderId) {
+        const content = state.folderContents[folderId];
+        const { shoppingEntries, todoEntries, planned } = collectPlanningData(folderId, false);
+        const limit = Number((content.board.budget && content.board.budget.limit) || 0);
+
+        panelEl.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+            <strong style="font-size:0.95rem;">📋 Kurzplanung</strong>
+            <span style="font-size:0.78rem; color:var(--text-muted);">${planned.toFixed(2)} € ${limit > 0 ? '/ ' + limit + ' €' : ''}</span>
+          </div>
+
+          <div style="font-size:0.76rem; font-weight:700; text-transform:uppercase; color:var(--text-muted); margin:10px 0 6px;">Einkaufsliste (${shoppingEntries.length})</div>
+          ${shoppingEntries.length === 0
+            ? '<p style="font-size:0.8rem; color:var(--text-muted); margin:0;">Keine Posten.</p>'
+            : shoppingEntries.map((e) => `
+              <div style="display:flex; justify-content:space-between; gap:6px; font-size:0.82rem; padding:4px 0; border-bottom:1px solid var(--border-color);">
+                <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(e.title)}</span>
+                <strong style="white-space:nowrap;">${(e.price * e.quantity).toFixed(2)} €</strong>
+              </div>
+            `).join('')}
+
+          <div style="font-size:0.76rem; font-weight:700; text-transform:uppercase; color:var(--text-muted); margin:14px 0 6px;">To-dos (${todoEntries.filter((t) => !t.ref.done).length} offen)</div>
+          ${todoEntries.length === 0
+            ? '<p style="font-size:0.8rem; color:var(--text-muted); margin:0;">Keine Aufgaben.</p>'
+            : todoEntries.map((t) => `
+              <label style="display:flex; align-items:center; gap:6px; font-size:0.82rem; padding:4px 0; cursor:pointer;">
+                <input type="checkbox" data-split-todo="${t.ref.id}" ${t.ref.done ? 'checked' : ''} />
+                <span style="${t.ref.done ? 'text-decoration:line-through; color:var(--text-muted);' : ''}">${escapeHtml(t.ref.text)}</span>
+              </label>
+            `).join('')}
+        `;
+
+        panelEl.querySelectorAll('[data-split-todo]').forEach((cb) => {
+          cb.addEventListener('change', () => {
+            const td = content.board.todos.find((x) => x.id === cb.getAttribute('data-split-todo'));
+            if (td) {
+              td.done = cb.checked;
+              scheduleBoardSave(folderId);
+              renderSplitPlanningPanel(panelEl, folderId);
+            }
+          });
+        });
+      }
 
       // Init
       applyTheme(localStorage.getItem(LS_KEYS.theme) || 'day');
