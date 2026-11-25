@@ -949,6 +949,22 @@
       display: block;
     }
 
+    .canvas-item.fit-contain img {
+      object-fit: contain;
+    }
+
+    .canvas-viewport.no-grid {
+      background-image: none;
+    }
+
+    .canvas-viewport.bg-white {
+      background-color: #FFFFFF;
+    }
+
+    .canvas-viewport.bg-dark {
+      background-color: #1F1D1B;
+    }
+
     .canvas-item-label {
       position: absolute;
       left: 6px;
@@ -1734,6 +1750,9 @@
         canvasPanX: 0,
         canvasPanY: 0,
         canvasLocked: window.innerWidth < 640,
+        canvasFitMode: 'cover', // 'cover' | 'contain'
+        canvasBg: 'default',    // 'default' | 'white' | 'dark'
+        canvasShowGrid: true,
         selectedCanvasIds: new Set(),
         homeEditMode: false,
         homeActiveZoneId: null,
@@ -3438,16 +3457,44 @@
           return;
         }
 
+        const cs = content.board.canvasSettings || {};
+        const fitMode = cs.fitMode || state.canvasFitMode;
+        const bgMode = cs.bgMode || state.canvasBg;
+        const showGrid = cs.showGrid !== undefined ? cs.showGrid : state.canvasShowGrid;
+
         container.innerHTML = `
           <div class="canvas-toolbar">
             <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
               <button id="canvasZoomOutBtn" class="btn btn-sm" type="button" title="Verkleinern">－</button>
               <span id="canvasZoomLabel" style="font-size:0.8rem; min-width:44px; text-align:center;">${Math.round(state.canvasZoom * 100)} %</span>
               <button id="canvasZoomInBtn" class="btn btn-sm" type="button" title="Vergrößern">＋</button>
-              <button id="canvasResetViewBtn" class="btn btn-sm" type="button">Einpassen</button>
-              <button id="canvasAutoLayoutBtn" class="btn btn-sm" type="button">Raster anordnen</button>
+              <button id="canvasResetViewBtn" class="btn btn-sm" type="button">100 %</button>
+
+              <button id="canvasFitBtn" class="btn btn-sm ${fitMode === 'contain' ? 'btn-oak' : ''}" type="button" title="Zwischen ganzem Bild und zugeschnittenem Kachel-Fill wechseln">
+                ${fitMode === 'contain' ? '🖼️ Ganzes Bild' : '✂️ Ausfüllen'}
+              </button>
+
+              <select id="canvasRatioSelect" class="form-control" style="width:auto; padding:4px 8px; font-size:0.78rem; border-radius:var(--radius-pill);" title="Kachel-Format auf Auswahl (oder alle) anwenden">
+                <option value="">📐 Format anwenden…</option>
+                <option value="original">Original-Proportion</option>
+                <option value="1:1">Quadrat (1:1)</option>
+                <option value="4:3">Querformat (4:3)</option>
+                <option value="3:4">Hochformat (3:4)</option>
+              </select>
+
+              <button id="canvasAutoLayoutBtn" class="btn btn-sm" type="button" title="Richtet Kacheln am Raster aus und behält deine Reihenfolge bei">🧲 Am Raster ausrichten</button>
+              <button id="canvasLayerUpBtn" class="btn btn-sm" type="button" title="Auswahl nach vorne">⬆️</button>
+              <button id="canvasLayerDownBtn" class="btn btn-sm" type="button" title="Auswahl nach hinten">⬇️</button>
+
+              <select id="canvasBgSelect" class="form-control" style="width:auto; padding:4px 8px; font-size:0.78rem; border-radius:var(--radius-pill);" title="Canvas-Hintergrund">
+                <option value="default" ${bgMode === 'default' ? 'selected' : ''}>Hintergrund: Standard</option>
+                <option value="white" ${bgMode === 'white' ? 'selected' : ''}>Hintergrund: Weiß</option>
+                <option value="dark" ${bgMode === 'dark' ? 'selected' : ''}>Hintergrund: Dunkel</option>
+              </select>
+              <button id="canvasGridBtn" class="btn btn-sm ${showGrid ? '' : 'btn-oak'}" type="button" title="Punktraster ein/aus">${showGrid ? 'Raster: An' : 'Raster: Aus'}</button>
+
               <button id="canvasLockBtn" class="btn btn-sm ${state.canvasLocked ? 'btn-oak' : ''}" type="button">
-                ${state.canvasLocked ? '🔒 Gesperrt' : '🔓 Frei verschieben'}
+                ${state.canvasLocked ? '🔒 Gesperrt' : '🔓 Frei'}
               </button>
               <button id="canvasSplitBtn" class="btn btn-sm ${state.canvasSplitOpen ? 'btn-primary' : ''}" type="button">
                 📋 Planung
@@ -3459,14 +3506,14 @@
           </div>
 
           <div class="canvas-split-layout ${state.canvasSplitOpen ? 'with-split' : ''}">
-            <div id="canvasViewport" class="canvas-viewport">
+            <div id="canvasViewport" class="canvas-viewport ${showGrid ? '' : 'no-grid'} ${bgMode === 'white' ? 'bg-white' : (bgMode === 'dark' ? 'bg-dark' : '')}">
               <div id="canvasStage" class="canvas-stage" style="transform: translate(${state.canvasPanX}px, ${state.canvasPanY}px) scale(${state.canvasZoom});">
                 ${visualItems.map((item) => {
                   const c = item.canvas;
                   const isSelected = state.selectedCanvasIds.has(item.id);
                   const src = item.localDataUrl || item.previewImageUrl || '';
                   return `
-                    <div class="canvas-item ${isSelected ? 'selected' : ''}"
+                    <div class="canvas-item ${isSelected ? 'selected' : ''} ${fitMode === 'contain' ? 'fit-contain' : ''}"
                          data-canvas-id="${item.id}"
                          style="left:${c.x}px; top:${c.y}px; width:${c.w}px; height:${c.h}px; z-index:${c.z || 1};">
                       <img src="${escapeHtml(src)}" alt="${escapeHtml(item.title)}" data-drive-img="${item.driveFileId || ''}" />
@@ -3553,12 +3600,95 @@
           document.getElementById('canvasZoomLabel').textContent = '100 %';
         });
         document.getElementById('canvasAutoLayoutBtn').addEventListener('click', () => {
-          visualItems.forEach((it, idx) => {
-            const col = idx % 4;
-            const row = Math.floor(idx / 4);
-            it.canvas = { x: 36 + col * 245, y: 36 + row * 235, w: 220, h: 210, z: idx + 1 };
+          // Reihenfolge anhand aktueller visueller Position (Zeilenbänder auf Y, dann X) beibehalten
+          const ordered = visualItems.slice().sort((a, b) => {
+            const ay = Math.round((a.canvas.y || 0) / 110);
+            const by = Math.round((b.canvas.y || 0) / 110);
+            if (ay !== by) return ay - by;
+            return (a.canvas.x || 0) - (b.canvas.x || 0);
+          });
+          const gap = 24;
+          const cols = 4;
+          let curX = 32;
+          let curY = 32;
+          let rowMaxH = 0;
+          ordered.forEach((it, idx) => {
+            if (idx > 0 && idx % cols === 0) {
+              curX = 32;
+              curY += rowMaxH + gap;
+              rowMaxH = 0;
+            }
+            it.canvas.x = curX;
+            it.canvas.y = curY;
+            curX += (it.canvas.w || 220) + gap;
+            rowMaxH = Math.max(rowMaxH, it.canvas.h || 210);
           });
           scheduleBoardSave(folderId);
+          renderCanvasView(container, statsEl, folderId);
+        });
+
+        function saveCanvasSetting(patch) {
+          if (!content.board.canvasSettings) content.board.canvasSettings = {};
+          Object.assign(content.board.canvasSettings, patch);
+          scheduleBoardSave(folderId);
+        }
+
+        document.getElementById('canvasFitBtn').addEventListener('click', () => {
+          const next = fitMode === 'contain' ? 'cover' : 'contain';
+          state.canvasFitMode = next;
+          saveCanvasSetting({ fitMode: next });
+          renderCanvasView(container, statsEl, folderId);
+        });
+
+        document.getElementById('canvasRatioSelect').addEventListener('change', (e) => {
+          const mode = e.target.value;
+          if (!mode) return;
+          const targets = state.selectedCanvasIds.size > 0
+            ? visualItems.filter((it) => state.selectedCanvasIds.has(it.id))
+            : visualItems;
+          for (const it of targets) {
+            if (mode === '1:1') { it.canvas.w = 220; it.canvas.h = 220; }
+            else if (mode === '4:3') { it.canvas.w = 240; it.canvas.h = 180; }
+            else if (mode === '3:4') { it.canvas.w = 200; it.canvas.h = 266; }
+            else if (mode === 'original') {
+              const imgEl = stage.querySelector(`.canvas-item[data-canvas-id="${it.id}"] img`);
+              if (imgEl && imgEl.naturalWidth > 0 && imgEl.naturalHeight > 0) {
+                const ratio = imgEl.naturalHeight / imgEl.naturalWidth;
+                it.canvas.w = 230;
+                it.canvas.h = Math.max(100, Math.min(420, Math.round(230 * ratio)));
+              }
+            }
+          }
+          scheduleBoardSave(folderId);
+          renderCanvasView(container, statsEl, folderId);
+        });
+
+        document.getElementById('canvasLayerUpBtn').addEventListener('click', () => {
+          if (state.selectedCanvasIds.size === 0) return;
+          const maxZ = Math.max(1, ...visualItems.map((i) => (i.canvas && i.canvas.z) || 1));
+          visualItems.forEach((it) => { if (state.selectedCanvasIds.has(it.id)) it.canvas.z = maxZ + 1; });
+          scheduleBoardSave(folderId);
+          renderCanvasView(container, statsEl, folderId);
+        });
+
+        document.getElementById('canvasLayerDownBtn').addEventListener('click', () => {
+          if (state.selectedCanvasIds.size === 0) return;
+          const minZ = Math.min(1, ...visualItems.map((i) => (i.canvas && i.canvas.z) || 1));
+          visualItems.forEach((it) => { if (state.selectedCanvasIds.has(it.id)) it.canvas.z = Math.max(0, minZ - 1); });
+          scheduleBoardSave(folderId);
+          renderCanvasView(container, statsEl, folderId);
+        });
+
+        document.getElementById('canvasBgSelect').addEventListener('change', (e) => {
+          state.canvasBg = e.target.value;
+          saveCanvasSetting({ bgMode: e.target.value });
+          renderCanvasView(container, statsEl, folderId);
+        });
+
+        document.getElementById('canvasGridBtn').addEventListener('click', () => {
+          const next = !showGrid;
+          state.canvasShowGrid = next;
+          saveCanvasSetting({ showGrid: next });
           renderCanvasView(container, statsEl, folderId);
         });
         document.getElementById('canvasLockBtn').addEventListener('click', () => {
