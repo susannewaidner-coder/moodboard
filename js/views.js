@@ -743,6 +743,9 @@
         state.editingItemTags = new Set(item && Array.isArray(item.tags) ? item.tags : []);
         renderItemTagPicker();
         document.getElementById('itemPreviewGroup').style.display = isBookmark ? 'block' : 'none';
+        document.getElementById('fetchBookmarkMetaBtn').style.display = isBookmark ? 'inline-flex' : 'none';
+        document.getElementById('bookmarkMetaHint').textContent = isBookmark ? 'Beim Einfügen einer URL werden Titel & Vorschaubild automatisch geladen.' : '';
+        updateBookmarkPreviewThumb();
         const shop = item && item.shopping ? item.shopping : { enabled: false, price: '', quantity: 1, status: 'idea' };
         document.getElementById('itemShopEnabled').checked = !!shop.enabled;
         document.getElementById('itemShopPrice').value = shop.price || '';
@@ -854,6 +857,64 @@
         if (e.target.files.length > 0) handleFileUploads(e.target.files);
         e.target.value = '';
       });
+
+      function updateBookmarkPreviewThumb() {
+        const prevUrl = document.getElementById('itemPreviewInput').value.trim();
+        const img = document.getElementById('itemPreviewThumb');
+        if (prevUrl) {
+          img.src = prevUrl;
+          img.style.display = 'block';
+        } else {
+          img.style.display = 'none';
+        }
+      }
+
+      async function fetchBookmarkMetadata(force = false) {
+        if (state.editingItem && state.editingItem.type === 'image') return;
+        const url = document.getElementById('itemUrlInput').value.trim();
+        if (!url || !/^https?:\/\//i.test(url)) return;
+
+        const titleInp = document.getElementById('itemTitleInput');
+        const prevInp = document.getElementById('itemPreviewInput');
+        const noteInp = document.getElementById('itemNoteInput');
+        const hintEl = document.getElementById('bookmarkMetaHint');
+
+        if (!force && prevInp.value.trim() && titleInp.value.trim()) return;
+
+        hintEl.textContent = '⏳ Lade Titel & Vorschaubild…';
+        try {
+          const res = await fetch(`https://api.microlink.io?url=${encodeURIComponent(url)}`);
+          const json = await res.json();
+          if (json && json.status === 'success' && json.data) {
+            if ((!titleInp.value.trim() || force) && json.data.title) {
+              titleInp.value = json.data.title.trim();
+            }
+            const imgUrl = (json.data.image && json.data.image.url) || (json.data.logo && json.data.logo.url) || '';
+            if ((!prevInp.value.trim() || force) && imgUrl) {
+              prevInp.value = imgUrl;
+            }
+            if (!noteInp.value.trim() && json.data.description) {
+              noteInp.value = json.data.description.trim();
+            }
+            hintEl.textContent = imgUrl ? '✅ Titel & Vorschaubild geladen.' : 'ℹ️ Titel geladen (kein OG-Bild gefunden – Screenshot-Fallback genutzt).';
+          }
+          if (!prevInp.value.trim()) {
+            prevInp.value = `https://s.wordpress.com/mshots/v1/${encodeURIComponent(url)}?w=600`;
+          }
+          updateBookmarkPreviewThumb();
+        } catch (e) {
+          if (!prevInp.value.trim()) {
+            prevInp.value = `https://s.wordpress.com/mshots/v1/${encodeURIComponent(url)}?w=600`;
+            updateBookmarkPreviewThumb();
+          }
+          hintEl.textContent = 'ℹ️ Seiten-Screenshot als Vorschaubild gesetzt.';
+        }
+      }
+
+      document.getElementById('fetchBookmarkMetaBtn').addEventListener('click', () => fetchBookmarkMetadata(true));
+      document.getElementById('itemUrlInput').addEventListener('change', () => fetchBookmarkMetadata(false));
+      document.getElementById('itemUrlInput').addEventListener('paste', () => setTimeout(() => fetchBookmarkMetadata(false), 60));
+      document.getElementById('itemPreviewInput').addEventListener('input', updateBookmarkPreviewThumb);
 
       document.getElementById('addBookmarkBtn').addEventListener('click', () => openItemModal(null));
       document.getElementById('addDocBtn').addEventListener('click', createNewGoogleDoc);
