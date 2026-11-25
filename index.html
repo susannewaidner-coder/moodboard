@@ -1295,13 +1295,15 @@
 
         <div class="search-box">
           <span class="search-icon" aria-hidden="true">🔍</span>
-          <input id="searchInput" class="search-input" type="search" placeholder="Suche nach Titel, Notiz, URL, Tag..." />
+          <input id="searchInput" class="search-input" type="search" placeholder="Suche nach Farbe, Motiv, Titel, Notiz, Tag..." />
         </div>
 
         <div class="topbar-actions">
           <button id="addImageBtn" class="btn btn-oak btn-sm" type="button">＋ Bild</button>
           <button id="addBookmarkBtn" class="btn btn-sm" type="button">🔗 Bookmark</button>
           <button id="addDocBtn" class="btn btn-sm" type="button" title="Neues Google Doc im Ordner anlegen">📄 Doc</button>
+          <button id="aiScanBtn" class="btn btn-sm" type="button" title="Farben &amp; KI-Motive für Bilder erkennen">🤖 KI-Suche</button>
+          <button id="geminiPdfBtn" class="btn btn-sm" type="button" title="Nummerierte PDF-Übersicht für Gemini in Drive speichern">📑 Gemini-PDF</button>
           <button id="themeToggleBtn" class="btn btn-sm" type="button" title="Tag-/Abend-Modus wechseln">☀️ Tag</button>
         </div>
       </header>
@@ -2303,12 +2305,16 @@
       function matchesSearch(item) {
         const q = state.searchQuery.trim().toLowerCase();
         if (!q) return true;
+        const aiColors = (item.ai && item.ai.colorNames) ? item.ai.colorNames : [];
+        const aiLabels = (item.ai && item.ai.labels) ? item.ai.labels : [];
         const haystack = [
           item.title,
           item.note,
           item.url,
           item.sourceUrl,
-          ...(item.tags || [])
+          ...(item.tags || []),
+          ...aiColors,
+          ...aiLabels
         ].join(' ').toLowerCase();
         return haystack.includes(q);
       }
@@ -2544,7 +2550,10 @@
         showSyncStatus(`Lade ${files.length} Bild(er) hoch…`, true);
         try {
           for (const file of files) {
+            const objUrl = URL.createObjectURL(file);
+            const aiColors = await analyzeColorsFromUrl(objUrl);
             if (state.mode === 'demo') {
+              URL.revokeObjectURL(objUrl);
               const dataUrl = await new Promise((resolve) => {
                 const reader = new FileReader();
                 reader.onload = () => resolve(reader.result);
@@ -2557,11 +2566,11 @@
                 title: file.name.replace(/\.[^.]+$/, ''),
                 sourceUrl: '',
                 note: '',
-                tags: []
+                tags: [],
+                ai: { ...aiColors, labels: [] }
               });
             } else {
               const uploaded = await DriveAdapter.uploadMultipart(folderId, file.name, file.type, file);
-              const objUrl = URL.createObjectURL(file);
               state.objectUrls.set(uploaded.id, objUrl);
               content.board.items.unshift({
                 id: uid('img'),
@@ -2570,7 +2579,8 @@
                 title: file.name.replace(/\.[^.]+$/, ''),
                 sourceUrl: '',
                 note: '',
-                tags: []
+                tags: [],
+                ai: { ...aiColors, labels: [] }
               });
             }
           }
@@ -4018,6 +4028,331 @@
           });
         });
       }
+
+      /* ========================================================================
+         17. PHASE 4: AUTOMATISCHE FARB- & KI-BILDSUCHE + GEMINI-PDF-EXPORT
+         ======================================================================== */
+      function rgbToGermanColorName(r, g, b) {
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        const l = (max + min) / 2 / 255;
+        const d = max - min;
+        if (d < 22) {
+          if (l > 0.85) return 'weiß';
+          if (l > 0.65) return 'creme';
+          if (l > 0.35) return 'grau';
+          return 'schwarz';
+        }
+        let h = 0;
+        if (max === r) h = ((g - b) / d) % 6;
+        else if (max === g) h = (b - r) / d + 2;
+        else h = (r - g) / d + 4;
+        h = Math.round(h * 60);
+        if (h < 0) h += 360;
+
+        if (h < 18 || h >= 340) return l < 0.35 ? 'bordeaux' : 'rot';
+        if (h < 42) return l > 0.72 ? 'beige' : (l < 0.4 ? 'braun' : 'holz');
+        if (h < 62) return l > 0.75 ? 'creme' : 'gold';
+        if (h < 155) return l > 0.6 ? 'salbei' : 'tannengrün';
+        if (h < 200) return 'türkis';
+        if (h < 255) return 'blau';
+        if (h < 310) return 'lila';
+        return 'rosa';
+      }
+
+      function analyzeColorsFromUrl(url) {
+        return new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            try {
+              const c = document.createElement('canvas');
+              c.width = 32;
+              c.height = 32;
+              const ctx = c.getContext('2d', { willReadFrequently: true });
+              ctx.drawImage(img, 0, 0, 32, 32);
+              const data = ctx.getImageData(0, 0, 32, 32).data;
+              const buckets = new Map();
+              const namesSet = new Set();
+              for (let i = 0; i < data.length; i += 16) {
+                if (data[i + 3] < 128) continue;
+                const r = data[i], g = data[i + 1], b = data[i + 2];
+                const rk = Math.min(255, Math.round(r / 32) * 32);
+                const gk = Math.min(255, Math.round(g / 32) * 32);
+                const bk = Math.min(255, Math.round(b / 32) * 32);
+                const key = `${rk},${gk},${bk}`;
+                buckets.set(key, (buckets.get(key) || 0) + 1);
+                namesSet.add(rgbToGermanColorName(r, g, b));
+              }
+              const colors = Array.from(buckets.entries())
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 4)
+                .map(([rgb]) => '#' + rgb.split(',').map((v) => Number(v).toString(16).padStart(2, '0')).join('').toUpperCase());
+              resolve({ colors, colorNames: Array.from(namesSet) });
+            } catch (e) {
+              resolve({ colors: [], colorNames: [] });
+            }
+          };
+          img.onerror = () => resolve({ colors: [], colorNames: [] });
+          img.src = url;
+        });
+      }
+
+      const CLIP_LABELS = [
+        { en: 'candle or candlestick', de: 'Kerze' },
+        { en: 'vase', de: 'Vase' },
+        { en: 'lamp or lighting', de: 'Lampe' },
+        { en: 'fairy lights', de: 'Lichterkette' },
+        { en: 'dining table', de: 'Esstisch' },
+        { en: 'chair or armchair', de: 'Stuhl' },
+        { en: 'sofa or couch', de: 'Sofa' },
+        { en: 'pillow or cushion', de: 'Kissen' },
+        { en: 'blanket or textile', de: 'Textil' },
+        { en: 'christmas tree', de: 'Christbaum' },
+        { en: 'christmas wreath', de: 'Kranz' },
+        { en: 'flowers or plant', de: 'Pflanze' },
+        { en: 'dishes or porcelain', de: 'Geschirr' },
+        { en: 'mirror', de: 'Spiegel' },
+        { en: 'wooden furniture or oak', de: 'Holz' },
+        { en: 'ceramic decoration', de: 'Keramik' }
+      ];
+
+      let clipWorker = null;
+      function getClipWorker() {
+        if (clipWorker) return clipWorker;
+        const workerCode = `
+          let classifier = null;
+          self.onmessage = async (e) => {
+            const { id, imageUrl, labels } = e.data;
+            try {
+              if (!classifier) {
+                self.postMessage({ type: 'status', text: 'Lade CLIP-Modell (~100 MB, nur einmalig)…' });
+                const { pipeline } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
+                classifier = await pipeline('zero-shot-image-classification', 'Xenova/clip-vit-base-patch32');
+              }
+              const res = await classifier(imageUrl, labels);
+              self.postMessage({ type: 'result', id, res });
+            } catch (err) {
+              self.postMessage({ type: 'error', id, error: err.message || String(err) });
+            }
+          };
+        `;
+        const blob = new Blob([workerCode], { type: 'application/javascript' });
+        clipWorker = new Worker(URL.createObjectURL(blob), { type: 'module' });
+        return clipWorker;
+      }
+
+      async function runAiScanForFolder(folderId) {
+        const content = state.folderContents[folderId];
+        if (!content) return;
+        const images = (content.board.items || []).filter((it) => it.type === 'image');
+        if (images.length === 0) {
+          alert('Keine eigenen Bilder in diesem Ordner vorhanden.');
+          return;
+        }
+
+        // Schritt 1: Sofortige Farbanalyse für alle Bilder
+        showSyncStatus('Analysiere Farben der Bilder…', true);
+        let updated = false;
+        for (const item of images) {
+          if (!item.ai) item.ai = { colors: [], colorNames: [], labels: [] };
+          if (!item.ai.colorNames || item.ai.colorNames.length === 0) {
+            const src = item.localDataUrl || (item.driveFileId && state.mode === 'drive' ? await DriveAdapter.fetchBlobUrl(item.driveFileId) : '');
+            if (src) {
+              const res = await analyzeColorsFromUrl(src);
+              item.ai.colors = res.colors;
+              item.ai.colorNames = res.colorNames;
+              updated = true;
+            }
+          }
+        }
+        if (updated) scheduleBoardSave(folderId);
+        showSyncStatus('', false);
+
+        const useClip = confirm(
+          'Farbbegriffe (z. B. „salbei“, „gold“, „beige“) wurden sofort ergänzt!\n\n' +
+          'Möchtest du zusätzlich die KI-Motiverkennung (CLIP) im Browser aktivieren?\n' +
+          '(Lädt einmalig ~100 MB im Hintergrund – auf Desktop/WLAN empfohlen.)'
+        );
+        if (!useClip) {
+          renderMainView();
+          return;
+        }
+
+        const worker = getClipWorker();
+        const enLabels = CLIP_LABELS.map((l) => l.en);
+        const enToDe = Object.fromEntries(CLIP_LABELS.map((l) => [l.en, l.de]));
+
+        worker.onmessage = (ev) => {
+          const msg = ev.data;
+          if (msg.type === 'status') {
+            showSyncStatus(msg.text, true);
+          } else if (msg.type === 'result') {
+            const item = images.find((x) => x.id === msg.id);
+            if (item) {
+              const top = (msg.res || []).filter((r) => r.score >= 0.14).slice(0, 3).map((r) => enToDe[r.label] || r.label);
+              item.ai.labels = Array.from(new Set(top));
+              item.tags = Array.from(new Set([...(item.tags || []), ...item.ai.labels]));
+              scheduleBoardSave(folderId);
+            }
+          } else if (msg.type === 'error') {
+            console.warn('CLIP Worker Fehler:', msg.error);
+          }
+        };
+
+        showSyncStatus('Erkenne Bildmotive im Web Worker…', true);
+        for (const item of images) {
+          const src = item.localDataUrl || (item.driveFileId && state.mode === 'drive' ? await DriveAdapter.fetchBlobUrl(item.driveFileId) : '');
+          if (!src) continue;
+          await new Promise((resolve) => {
+            const origOnMsg = worker.onmessage;
+            worker.onmessage = (ev) => {
+              origOnMsg(ev);
+              if (ev.data.type === 'result' || ev.data.type === 'error') resolve();
+            };
+            worker.postMessage({ id: item.id, imageUrl: src, labels: enLabels });
+          });
+        }
+        showSyncStatus('KI-Motiverkennung abgeschlossen!', true);
+        setTimeout(() => showSyncStatus('', false), 2200);
+        renderMainView();
+      }
+
+      async function ensureJsPdfLoaded() {
+        if (window.jspdf && window.jspdf.jsPDF) return window.jspdf.jsPDF;
+        await new Promise((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+          s.onload = resolve;
+          s.onerror = () => reject(new Error('jsPDF konnte nicht geladen werden.'));
+          document.head.appendChild(s);
+        });
+        return window.jspdf.jsPDF;
+      }
+
+      async function exportFolderToGeminiPdf(folderId) {
+        if (!folderId || !state.folderContents[folderId]) {
+          alert('Bitte wähle zuerst einen Projektordner aus.');
+          return;
+        }
+        const content = state.folderContents[folderId];
+        const folder = state.folders.find((f) => f.id === folderId);
+        const folderName = folder ? folder.name : 'Projekt';
+
+        showSyncStatus('Erstelle Gemini-PDF-Kontaktbogen…', true);
+        try {
+          const JsPDF = await ensureJsPdfLoaded();
+          const doc = new JsPDF({ unit: 'mm', format: 'a4' });
+          const { shoppingEntries, todoEntries, planned, spent } = collectPlanningData(folderId, false);
+          const limit = Number((content.board.budget && content.board.budget.limit) || 0);
+
+          // Titel & Budget-Kopf
+          doc.setFontSize(16);
+          doc.text(`Moodboard: ${folderName}`, 14, 18);
+          doc.setFontSize(10);
+          doc.text(`Budget: ${limit > 0 ? limit.toFixed(2) + ' EUR' : 'kein Limit'} | Verplant: ${planned.toFixed(2)} EUR | Ausgegeben: ${spent.toFixed(2)} EUR`, 14, 25);
+
+          let y = 33;
+          const openTodos = todoEntries.filter((t) => !t.ref.done);
+          if (openTodos.length > 0) {
+            doc.setFontSize(11);
+            doc.text('Offene To-dos:', 14, y);
+            y += 5;
+            doc.setFontSize(9);
+            for (const td of openTodos.slice(0, 8)) {
+              doc.text(`- ${td.ref.text}`, 16, y);
+              y += 4.5;
+            }
+            y += 4;
+          }
+
+          // Nummerierte Bilder im 2-Spalten-Raster
+          const items = content.board.items || [];
+          let col = 0;
+          for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (y > 235) {
+              doc.addPage();
+              y = 18;
+              col = 0;
+            }
+            const x = col === 0 ? 14 : 108;
+            const src = item.localDataUrl || (item.driveFileId && state.mode === 'drive' ? await DriveAdapter.fetchBlobUrl(item.driveFileId) : '');
+
+            if (src) {
+              try {
+                const imgData = await new Promise((res, rej) => {
+                  const im = new Image();
+                  im.onload = () => {
+                    const c = document.createElement('canvas');
+                    const scale = Math.min(1, 600 / im.width);
+                    c.width = Math.round(im.width * scale);
+                    c.height = Math.round(im.height * scale);
+                    c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+                    res({ dataUrl: c.toDataURL('image/jpeg', 0.82), w: c.width, h: c.height });
+                  };
+                  im.onerror = rej;
+                  im.src = src;
+                });
+                const boxW = 84;
+                const boxH = Math.min(54, (imgData.h / imgData.w) * boxW);
+                doc.addImage(imgData.dataUrl, 'JPEG', x, y, boxW, boxH);
+              } catch (e) {
+                doc.rect(x, y, 84, 30);
+              }
+            } else {
+              doc.rect(x, y, 84, 24);
+            }
+
+            const priceTxt = item.shopping && item.shopping.enabled ? ` | ${Number(item.shopping.price || 0).toFixed(2)} EUR` : '';
+            doc.setFontSize(9);
+            doc.text(`#${i + 1} ${item.title || 'Ohne Titel'}${priceTxt}`.slice(0, 52), x, y + 59);
+            if (item.note) {
+              doc.setFontSize(8);
+              doc.text(item.note.slice(0, 58), x, y + 63.5);
+            }
+
+            col++;
+            if (col === 2) {
+              col = 0;
+              y += 72;
+            }
+          }
+
+          const pdfBlob = doc.output('blob');
+          const safeName = folderName.replace(/[^a-zA-Z0-9_-]+/g, '-');
+          const fileName = `Moodboard-Uebersicht-${safeName}.pdf`;
+
+          if (state.mode === 'drive') {
+            const existing = (content.driveFiles || []).find((f) => f.name === fileName);
+            const saved = await DriveAdapter.uploadMultipart(folderId, fileName, 'application/pdf', pdfBlob, existing ? existing.id : null);
+            if (!existing) content.driveFiles.unshift(saved);
+            showSyncStatus(`PDF „${fileName}“ in Google Drive gespeichert – bereit für Gemini!`, true);
+            setTimeout(() => showSyncStatus('', false), 3500);
+            renderMainView();
+          } else {
+            const url = URL.createObjectURL(pdfBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            a.click();
+            URL.revokeObjectURL(url);
+            showSyncStatus('PDF lokal heruntergeladen (Demo-Modus)', true);
+            setTimeout(() => showSyncStatus('', false), 2500);
+          }
+        } catch (err) {
+          alert('PDF-Export fehlgeschlagen: ' + err.message);
+          showSyncStatus('', false);
+        }
+      }
+
+      document.getElementById('aiScanBtn').addEventListener('click', () => {
+        if (!state.activeFolderId) { alert('Bitte wähle zuerst einen Ordner aus.'); return; }
+        runAiScanForFolder(state.activeFolderId);
+      });
+
+      document.getElementById('geminiPdfBtn').addEventListener('click', () => {
+        exportFolderToGeminiPdf(state.activeFolderId);
+      });
 
       // Init
       applyTheme(localStorage.getItem(LS_KEYS.theme) || 'day');
