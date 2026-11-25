@@ -29,7 +29,7 @@
       --radius-md: 12px;
       --radius-lg: 18px;
       --radius-pill: 999px;
-      --sidebar-width: 280px;
+      --sidebar-width: 225px;
       --header-height: 64px;
       --transition-theme: background-color 0.35s ease, color 0.3s ease, border-color 0.3s ease;
     }
@@ -253,13 +253,48 @@
     }
 
     .tree-actions {
+      position: relative;
       display: none;
       gap: 2px;
     }
 
     .tree-row:hover .tree-actions,
-    .tree-row.active .tree-actions {
+    .tree-row.active .tree-actions,
+    .tree-actions.open {
       display: inline-flex;
+    }
+
+    .tree-menu-popover {
+      position: fixed;
+      z-index: 120;
+      min-width: 170px;
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-md);
+      padding: 5px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .tree-menu-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 7px 10px;
+      border: none;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--text-primary);
+      font-size: 0.82rem;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .tree-menu-item:hover {
+      background-color: var(--card-subtle);
     }
 
     .tree-children {
