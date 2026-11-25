@@ -766,9 +766,17 @@
       });
 
       document.getElementById('openSidebarBtn').addEventListener('click', () => {
-        document.getElementById('sidebar').classList.add('open');
-        document.getElementById('sidebarOverlay').classList.add('open');
+        if (window.innerWidth <= 860) {
+          document.getElementById('sidebar').classList.add('open');
+          document.getElementById('sidebarOverlay').classList.add('open');
+        } else {
+          const collapsed = document.body.classList.toggle('sidebar-collapsed');
+          localStorage.setItem('mb_sidebar_collapsed', collapsed ? '1' : '0');
+        }
       });
+      if (localStorage.getItem('mb_sidebar_collapsed') === '1' && window.innerWidth > 860) {
+        document.body.classList.add('sidebar-collapsed');
+      }
       document.getElementById('closeSidebarBtn').addEventListener('click', closeMobileSidebar);
       document.getElementById('sidebarOverlay').addEventListener('click', closeMobileSidebar);
 
