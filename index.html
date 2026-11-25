@@ -1240,6 +1240,47 @@
       overflow-y: auto;
       box-shadow: var(--shadow-sm);
     }
+
+    .tag-filter-wrap {
+      position: relative;
+      display: inline-block;
+    }
+
+    .tag-filter-popover {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      width: 280px;
+      max-height: 290px;
+      overflow-y: auto;
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-md);
+      padding: 10px;
+      z-index: 45;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .tag-filter-popover.hidden {
+      display: none;
+    }
+
+    .tag-filter-option {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 8px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 0.84rem;
+    }
+
+    .tag-filter-option:hover {
+      background-color: var(--card-subtle);
+    }
   </style>
 </head>
 <body>
@@ -1630,7 +1671,9 @@
         globalTags: ['Basteln', 'Material', 'Deko', 'Inspiration', 'Weihnachten', 'Dekoobjekt', 'Verpackung', 'Möbel', 'Tischdeko', 'Trockenblume', 'Streudeko', 'Karte', 'Ostern', 'Christbaum', 'Vase', 'Kuchen', 'Rezept', 'Winter', 'Dekobasis', 'Kerzenhalter', 'Outdoor', 'Kerze', 'Plätzchen', 'Sommer', 'Frühling', 'Herbst', 'Pflanzen'],
         tagsFileId: null,
         activeTagFilters: new Set(),
-        editingItemTags: new Set()
+        editingItemTags: new Set(),
+        gallerySort: 'newest',
+        tagDropdownOpen: false
       };
 
       /* ========================================================================
@@ -2477,9 +2520,23 @@
         bindGalleryItemEvents(container, null);
       }
 
+      function sortGalleryItems(list) {
+        const arr = list.slice();
+        if (state.gallerySort === 'title_asc') {
+          arr.sort((a, b) => (a.title || '').localeCompare(b.title || '', 'de'));
+        } else if (state.gallerySort === 'title_desc') {
+          arr.sort((a, b) => (b.title || '').localeCompare(a.title || '', 'de'));
+        } else if (state.gallerySort === 'price_asc') {
+          arr.sort((a, b) => ((a.shopping && a.shopping.enabled ? Number(a.shopping.price || 0) : Infinity) - (b.shopping && b.shopping.enabled ? Number(b.shopping.price || 0) : Infinity)));
+        } else if (state.gallerySort === 'price_desc') {
+          arr.sort((a, b) => ((b.shopping && b.shopping.enabled ? Number(b.shopping.price || 0) : -1) - (a.shopping && a.shopping.enabled ? Number(a.shopping.price || 0) : -1)));
+        }
+        return arr;
+      }
+
       function renderGalleryView(container, statsEl, folderId) {
         const content = state.folderContents[folderId];
-        const items = (content.board.items || []).filter(matchesSearch);
+        const items = sortGalleryItems((content.board.items || []).filter(matchesSearch));
         const docs = (content.driveFiles || []).filter((df) => !df.mimeType.startsWith('image/') && (!state.searchQuery.trim() || df.name.toLowerCase().includes(state.searchQuery.trim().toLowerCase())));
 
         statsEl.textContent = `${items.length} Elemente · ${docs.length} Drive-Dokumente`;
@@ -2491,22 +2548,43 @@
                 <button class="pill-btn ${state.galleryMode === 'grid' ? 'active' : ''}" data-gmode="grid" type="button">Kacheln</button>
                 <button class="pill-btn ${state.galleryMode === 'list' ? 'active' : ''}" data-gmode="list" type="button">Liste</button>
               </div>
-              <button id="manageTagsBtn" class="btn btn-sm" type="button">🏷️ Tags verwalten</button>
-            </div>
-            <div style="font-size:0.8rem; color:var(--text-muted);">
-              Tipp: Bilder einfach hierher ziehen oder per „＋ Bild“ hochladen.
-            </div>
-          </div>
 
-          <div style="display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-bottom:14px;">
-            <span style="font-size:0.76rem; color:var(--text-muted); margin-right:4px;">Tag-Filter (Mehrfachauswahl):</span>
-            ${state.activeTagFilters.size > 0
-              ? '<button id="clearTagFiltersBtn" class="pill-btn" type="button" style="border:1px solid var(--border-color);">✕ Alle zurücksetzen</button>'
-              : ''}
-            ${state.globalTags.map((tag) => {
-              const active = state.activeTagFilters.has(tag);
-              return `<button class="pill-btn ${active ? 'active' : ''}" data-tag-filter="${escapeHtml(tag)}" type="button" style="border:1px solid ${active ? 'var(--accent-oak)' : 'var(--border-color)'};">#${escapeHtml(tag)}</button>`;
-            }).join('')}
+              <div class="tag-filter-wrap">
+                <button id="toggleTagFilterBtn" class="btn btn-sm ${state.activeTagFilters.size > 0 ? 'btn-oak' : ''}" type="button">
+                  🏷️ Filter${state.activeTagFilters.size > 0 ? ` (${state.activeTagFilters.size})` : ''} ▾
+                </button>
+                <div id="tagFilterPopover" class="tag-filter-popover ${state.tagDropdownOpen ? '' : 'hidden'}">
+                  <div style="display:flex; justify-content:space-between; align-items:center; padding:2px 4px 6px; border-bottom:1px solid var(--border-color); margin-bottom:4px;">
+                    <strong style="font-size:0.78rem;">Tags filtern</strong>
+                    ${state.activeTagFilters.size > 0 ? '<button id="clearTagFiltersBtn" class="btn btn-sm" style="padding:2px 8px; font-size:0.72rem;" type="button">Zurücksetzen</button>' : ''}
+                  </div>
+                  ${state.globalTags.map((tag) => `
+                    <label class="tag-filter-option">
+                      <input type="checkbox" data-tag-filter="${escapeHtml(tag)}" ${state.activeTagFilters.has(tag) ? 'checked' : ''} />
+                      <span>#${escapeHtml(tag)}</span>
+                    </label>
+                  `).join('')}
+                </div>
+              </div>
+
+              <select id="gallerySortSelect" class="form-control" style="width:auto; padding:5px 10px; font-size:0.8rem; border-radius:var(--radius-pill);" aria-label="Sortierung">
+                <option value="newest" ${state.gallerySort === 'newest' ? 'selected' : ''}>Sortierung: Standard</option>
+                <option value="title_asc" ${state.gallerySort === 'title_asc' ? 'selected' : ''}>Titel (A–Z)</option>
+                <option value="title_desc" ${state.gallerySort === 'title_desc' ? 'selected' : ''}>Titel (Z–A)</option>
+                <option value="price_asc" ${state.gallerySort === 'price_asc' ? 'selected' : ''}>Preis (aufsteigend)</option>
+                <option value="price_desc" ${state.gallerySort === 'price_desc' ? 'selected' : ''}>Preis (absteigend)</option>
+              </select>
+
+              <button id="manageTagsBtn" class="btn btn-sm" type="button" title="Tag-Liste verwalten">⚙️ Tags</button>
+            </div>
+
+            ${state.activeTagFilters.size > 0 ? `
+              <div style="display:flex; flex-wrap:wrap; gap:4px; align-items:center;">
+                ${Array.from(state.activeTagFilters).map((t) => `
+                  <button class="pill-btn active" data-remove-tag-chip="${escapeHtml(t)}" type="button" style="border:1px solid var(--accent-oak); font-size:0.74rem;">#${escapeHtml(t)} ✕</button>
+                `).join('')}
+              </div>
+            ` : ''}
           </div>
 
           <div id="galleryDropzone" class="dropzone">
@@ -2520,6 +2598,20 @@
         `;
 
         document.getElementById('manageTagsBtn').addEventListener('click', openTagsManagerModal);
+        document.getElementById('gallerySortSelect').addEventListener('change', (e) => {
+          state.gallerySort = e.target.value;
+          renderGalleryView(container, statsEl, folderId);
+        });
+
+        const toggleFilterBtn = document.getElementById('toggleTagFilterBtn');
+        const popover = document.getElementById('tagFilterPopover');
+        toggleFilterBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          state.tagDropdownOpen = !state.tagDropdownOpen;
+          popover.classList.toggle('hidden', !state.tagDropdownOpen);
+        });
+        popover.addEventListener('click', (e) => e.stopPropagation());
+
         const clearBtn = document.getElementById('clearTagFiltersBtn');
         if (clearBtn) {
           clearBtn.addEventListener('click', () => {
@@ -2527,11 +2619,17 @@
             renderGalleryView(container, statsEl, folderId);
           });
         }
-        container.querySelectorAll('[data-tag-filter]').forEach((btn) => {
+        container.querySelectorAll('input[data-tag-filter]').forEach((cb) => {
+          cb.addEventListener('change', () => {
+            const t = cb.getAttribute('data-tag-filter');
+            if (cb.checked) state.activeTagFilters.add(t);
+            else state.activeTagFilters.delete(t);
+            renderGalleryView(container, statsEl, folderId);
+          });
+        });
+        container.querySelectorAll('[data-remove-tag-chip]').forEach((btn) => {
           btn.addEventListener('click', () => {
-            const t = btn.getAttribute('data-tag-filter');
-            if (state.activeTagFilters.has(t)) state.activeTagFilters.delete(t);
-            else state.activeTagFilters.add(t);
+            state.activeTagFilters.delete(btn.getAttribute('data-remove-tag-chip'));
             renderGalleryView(container, statsEl, folderId);
           });
         });
@@ -3078,7 +3176,15 @@
         const visualItems = (content.board.items || []).filter((it) => it.type === 'image' || it.previewImageUrl);
         statsEl.textContent = `${visualItems.length} Bilder auf dem Canvas`;
 
-        // Initiale Positionen vergeben, falls noch keine Canvas-Koordinaten existieren
+        document.addEventListener('click', () => {
+        if (state.tagDropdownOpen) {
+          state.tagDropdownOpen = false;
+          const pop = document.getElementById('tagFilterPopover');
+          if (pop) pop.classList.add('hidden');
+        }
+      });
+
+      // Initiale Positionen vergeben, falls noch keine Canvas-Koordinaten existieren
         let changed = false;
         visualItems.forEach((item, idx) => {
           if (!item.canvas) {
@@ -4762,6 +4868,14 @@
         await saveGlobalTags();
         renderGlobalTagsManager();
         renderMainView();
+      });
+
+      document.addEventListener('click', () => {
+        if (state.tagDropdownOpen) {
+          state.tagDropdownOpen = false;
+          const pop = document.getElementById('tagFilterPopover');
+          if (pop) pop.classList.add('hidden');
+        }
       });
 
       // Init
