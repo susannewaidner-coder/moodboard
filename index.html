@@ -4310,7 +4310,7 @@
         item.ai.labels = Array.isArray(gRes.tags) ? gRes.tags.slice(0, 4) : [];
         item.tags = Array.from(new Set([...manualTags, ...item.ai.labels]));
 
-        if (gRes.title && (isNewUpload || !item.title || /^(img|pxl|dsc|photo|clip|download|image|screenshot|unbenannt)/i.test(item.title))) {
+        if (gRes.title) {
           item.title = gRes.title;
         }
         if (gRes.description && (isNewUpload || !item.note)) {
