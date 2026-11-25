@@ -1561,6 +1561,8 @@
         demoData: 'mb_demo_data_v1'
       };
 
+      const CLIENT_SESSION_ID = 'sess-' + Math.random().toString(36).slice(2, 10);
+
       const state = {
         mode: 'unauthenticated', // 'unauthenticated' | 'drive' | 'demo'
         accessToken: null,
@@ -1577,6 +1579,8 @@
         folderContents: {},      // folderId -> { board, boardFileId, modifiedTime, driveFiles: [] }
         objectUrls: new Map(),   // driveFileId -> blobObjectUrl
         dirtyFolders: new Set(),
+        savingFolders: new Set(),
+        resaveFolders: new Set(),
         saveTimer: null,
         editingItem: null,
         pendingConflict: null,
@@ -2048,25 +2052,44 @@
         const content = state.folderContents[folderId];
         if (!content) return;
 
+        if (state.savingFolders.has(folderId)) {
+          state.resaveFolders.add(folderId);
+          return;
+        }
+
         if (!state.accessToken) {
           bufferBoardLocally(folderId, content.board);
           handleTokenExpired();
           return;
         }
 
+        state.savingFolders.add(folderId);
         showSyncStatus('Speichere Änderungen in Google Drive…', true);
         try {
-          // Konfliktschutz: modifiedTime prüfen bevor wir überschreiben
+          // Konfliktschutz: modifiedTime & Session-ID prüfen bevor wir überschreiben
           if (content.boardFileId && content.modifiedTime && !forceOverwrite) {
             const remoteMeta = await DriveAdapter.getFileMeta(content.boardFileId);
-            if (remoteMeta.modifiedTime && remoteMeta.modifiedTime !== content.modifiedTime) {
-              showSyncStatus('', false);
-              state.pendingConflict = folderId;
-              openModal('conflictModal');
-              return;
+            const localTs = Date.parse(content.modifiedTime) || 0;
+            const remoteTs = Date.parse(remoteMeta.modifiedTime) || 0;
+            if (remoteTs - localTs > 2000) {
+              let isDifferentDevice = true;
+              try {
+                const remoteBoard = await DriveAdapter.downloadJson(content.boardFileId);
+                if (remoteBoard && remoteBoard._lastUpdatedBy === CLIENT_SESSION_ID) {
+                  isDifferentDevice = false;
+                }
+              } catch (e) { /* Im Zweifel Konflikt anzeigen */ }
+
+              if (isDifferentDevice) {
+                showSyncStatus('', false);
+                state.pendingConflict = folderId;
+                openModal('conflictModal');
+                return;
+              }
             }
           }
 
+          content.board._lastUpdatedBy = CLIENT_SESSION_ID;
           const blob = new Blob([JSON.stringify(content.board, null, 2)], { type: 'application/json' });
           const saved = await DriveAdapter.uploadMultipart(folderId, 'board.json', 'application/json', blob, content.boardFileId);
           content.boardFileId = saved.id;
@@ -2079,7 +2102,12 @@
             alert('Fehler beim Speichern: ' + err.message);
           }
         } finally {
+          state.savingFolders.delete(folderId);
           showSyncStatus('', false);
+          if (state.resaveFolders.has(folderId)) {
+            state.resaveFolders.delete(folderId);
+            saveBoardNow(folderId, forceOverwrite);
+          }
         }
       }
 
