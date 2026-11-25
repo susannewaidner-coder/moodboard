@@ -4845,80 +4845,126 @@
         try {
           const JsPDF = await ensureJsPdfLoaded();
           const doc = new JsPDF({ unit: 'mm', format: 'a4' });
-          const { shoppingEntries, todoEntries, planned, spent } = collectPlanningData(folderId, false);
+          const { todoEntries, planned, spent } = collectPlanningData(folderId, true);
           const limit = Number((content.board.budget && content.board.budget.limit) || 0);
 
-          // Titel & Budget-Kopf
+          // Titel & Budget-Kopf (mit sauberem Umbruch)
           doc.setFontSize(16);
-          doc.text(`Moodboard: ${folderName}`, 14, 18);
-          doc.setFontSize(10);
-          doc.text(`Budget: ${limit > 0 ? limit.toFixed(2) + ' EUR' : 'kein Limit'} | Verplant: ${planned.toFixed(2)} EUR | Ausgegeben: ${spent.toFixed(2)} EUR`, 14, 25);
+          const titleLines = doc.splitTextToSize(`Moodboard: ${folderName}`, 182);
+          doc.text(titleLines, 14, 18);
+          let y = 18 + titleLines.length * 6.5;
 
-          let y = 33;
+          doc.setFontSize(10);
+          const budgetLine = `Budget: ${limit > 0 ? limit.toFixed(2) + ' EUR' : 'kein Limit'} | Verplant: ${planned.toFixed(2)} EUR | Ausgegeben: ${spent.toFixed(2)} EUR`;
+          const budgetLines = doc.splitTextToSize(budgetLine, 182);
+          doc.text(budgetLines, 14, y);
+          y += budgetLines.length * 5 + 3;
+
           const openTodos = todoEntries.filter((t) => !t.ref.done);
           if (openTodos.length > 0) {
             doc.setFontSize(11);
             doc.text('Offene To-dos:', 14, y);
             y += 5;
             doc.setFontSize(9);
-            for (const td of openTodos.slice(0, 8)) {
-              doc.text(`- ${td.ref.text}`, 16, y);
-              y += 4.5;
+            for (const td of openTodos.slice(0, 12)) {
+              const tdLines = doc.splitTextToSize(`- ${td.ref.text}`, 178);
+              if (y + tdLines.length * 4.2 > 280) { doc.addPage(); y = 18; }
+              doc.text(tdLines, 16, y);
+              y += tdLines.length * 4.2 + 0.8;
             }
             y += 4;
           }
 
-          // Nummerierte Bilder im 2-Spalten-Raster
+          // Nummerierte Bilder im 2-Spalten-Raster (unverzerrt + sauber umbrochen)
           const items = content.board.items || [];
-          let col = 0;
-          for (let i = 0; i < items.length; i++) {
-            const item = items[i];
-            if (y > 235) {
+          const maxBoxW = 84;
+          const maxBoxH = 54;
+
+          for (let i = 0; i < items.length; i += 2) {
+            const pair = [items[i], items[i + 1]].filter(Boolean);
+            const prepared = [];
+            let maxTextH = 0;
+
+            for (let cIdx = 0; cIdx < pair.length; cIdx++) {
+              const item = pair[cIdx];
+              const num = i + cIdx + 1;
+              const src = item.localDataUrl || (item.driveFileId && state.mode === 'drive' ? await DriveAdapter.fetchBlobUrl(item.driveFileId) : '');
+              let imgData = null;
+              if (src) {
+                try {
+                  imgData = await new Promise((res, rej) => {
+                    const im = new Image();
+                    im.onload = () => {
+                      const c = document.createElement('canvas');
+                      const scale = Math.min(1, 600 / im.width);
+                      c.width = Math.round(im.width * scale);
+                      c.height = Math.round(im.height * scale);
+                      c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+                      res({ dataUrl: c.toDataURL('image/jpeg', 0.82), w: c.width, h: c.height });
+                    };
+                    im.onerror = rej;
+                    im.src = src;
+                  });
+                } catch (e) { imgData = null; }
+              }
+
+              const priceTxt = item.shopping && item.shopping.enabled ? ` (${Number(item.shopping.price || 0).toFixed(2)} EUR)` : '';
+              doc.setFontSize(9.5);
+              const tLines = doc.splitTextToSize(`#${num} ${item.title || 'Ohne Titel'}${priceTxt}`, maxBoxW).slice(0, 2);
+              doc.setFontSize(8);
+              const tagsTxt = (item.tags && item.tags.length > 0) ? `Tags: ${item.tags.join(', ')}` : '';
+              const nLines = item.note ? doc.splitTextToSize(item.note, maxBoxW).slice(0, 4) : [];
+              const tagLines = tagsTxt ? doc.splitTextToSize(tagsTxt, maxBoxW).slice(0, 2) : [];
+
+              const textH = tLines.length * 4.2 + nLines.length * 3.6 + tagLines.length * 3.6 + 6;
+              if (textH > maxTextH) maxTextH = textH;
+              prepared.push({ imgData, tLines, nLines, tagLines });
+            }
+
+            const rowHeight = maxBoxH + 4 + maxTextH + 4;
+            if (y + rowHeight > 285) {
               doc.addPage();
               y = 18;
-              col = 0;
             }
-            const x = col === 0 ? 14 : 108;
-            const src = item.localDataUrl || (item.driveFileId && state.mode === 'drive' ? await DriveAdapter.fetchBlobUrl(item.driveFileId) : '');
 
-            if (src) {
-              try {
-                const imgData = await new Promise((res, rej) => {
-                  const im = new Image();
-                  im.onload = () => {
-                    const c = document.createElement('canvas');
-                    const scale = Math.min(1, 600 / im.width);
-                    c.width = Math.round(im.width * scale);
-                    c.height = Math.round(im.height * scale);
-                    c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
-                    res({ dataUrl: c.toDataURL('image/jpeg', 0.82), w: c.width, h: c.height });
-                  };
-                  im.onerror = rej;
-                  im.src = src;
-                });
-                const boxW = 84;
-                const boxH = Math.min(54, (imgData.h / imgData.w) * boxW);
-                doc.addImage(imgData.dataUrl, 'JPEG', x, y, boxW, boxH);
-              } catch (e) {
-                doc.rect(x, y, 84, 30);
+            for (let cIdx = 0; cIdx < prepared.length; cIdx++) {
+              const p = prepared[cIdx];
+              const x = cIdx === 0 ? 14 : 108;
+
+              // Heller Rahmen um Bildbox
+              doc.setDrawColor(225, 222, 216);
+              doc.rect(x, y, maxBoxW, maxBoxH);
+
+              if (p.imgData) {
+                const ratio = Math.min(maxBoxW / p.imgData.w, maxBoxH / p.imgData.h);
+                const drawW = p.imgData.w * ratio;
+                const drawH = p.imgData.h * ratio;
+                const drawX = x + (maxBoxW - drawW) / 2;
+                const drawY = y + (maxBoxH - drawH) / 2;
+                doc.addImage(p.imgData.dataUrl, 'JPEG', drawX, drawY, drawW, drawH);
               }
-            } else {
-              doc.rect(x, y, 84, 24);
+
+              let ty = y + maxBoxH + 5;
+              doc.setFontSize(9.5);
+              doc.setTextColor(44, 46, 45);
+              doc.text(p.tLines, x, ty);
+              ty += p.tLines.length * 4.2 + 1;
+
+              if (p.nLines.length > 0) {
+                doc.setFontSize(8);
+                doc.setTextColor(100, 102, 100);
+                doc.text(p.nLines, x, ty);
+                ty += p.nLines.length * 3.6 + 1;
+              }
+              if (p.tagLines.length > 0) {
+                doc.setFontSize(7.5);
+                doc.setTextColor(140, 120, 90);
+                doc.text(p.tagLines, x, ty);
+              }
+              doc.setTextColor(0, 0, 0);
             }
 
-            const priceTxt = item.shopping && item.shopping.enabled ? ` | ${Number(item.shopping.price || 0).toFixed(2)} EUR` : '';
-            doc.setFontSize(9);
-            doc.text(`#${i + 1} ${item.title || 'Ohne Titel'}${priceTxt}`.slice(0, 52), x, y + 59);
-            if (item.note) {
-              doc.setFontSize(8);
-              doc.text(item.note.slice(0, 58), x, y + 63.5);
-            }
-
-            col++;
-            if (col === 2) {
-              col = 0;
-              y += 72;
-            }
+            y += rowHeight;
           }
 
           const pdfBlob = doc.output('blob');
