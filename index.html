@@ -1374,6 +1374,12 @@
         </select>
       </div>
 
+      <div class="form-group">
+        <label class="form-label" for="geminiKeyInput">Gemini API Key (optional – für freie Bildbeschreibung &amp; Tags)</label>
+        <input id="geminiKeyInput" class="form-control" type="password" placeholder="AIza..." />
+        <div class="form-hint">Nur lokal gespeichert. Ohne Key nutzt die App die kostenlose Browser-Farb-/CLIP-Suche.</div>
+      </div>
+
       <details style="font-size:0.82rem; color:var(--text-secondary); margin-top:10px; background:var(--card-subtle); padding:10px 12px; border-radius:var(--radius-sm);">
         <summary style="cursor:pointer; font-weight:600; color:var(--text-primary);">Kurzanleitung: Client-ID erstellen</summary>
         <ol style="padding-left:18px; margin:8px 0 0;">
@@ -1558,7 +1564,8 @@
         theme: 'mb_theme_mode',
         pendingSaves: 'mb_pending_board_saves',
         demoMode: 'mb_demo_mode',
-        demoData: 'mb_demo_data_v1'
+        demoData: 'mb_demo_data_v1',
+        geminiKey: 'mb_gemini_api_key'
       };
 
       const CLIENT_SESSION_ID = 'sess-' + Math.random().toString(36).slice(2, 10);
@@ -1635,7 +1642,8 @@
         return {
           clientId: localStorage.getItem(LS_KEYS.clientId) || '',
           rootName: localStorage.getItem(LS_KEYS.rootName) || 'Moodboards',
-          scope: localStorage.getItem(LS_KEYS.scope) || 'https://www.googleapis.com/auth/drive.file'
+          scope: localStorage.getItem(LS_KEYS.scope) || 'https://www.googleapis.com/auth/drive.file',
+          geminiKey: localStorage.getItem(LS_KEYS.geminiKey) || ''
         };
       }
 
@@ -2335,11 +2343,13 @@
         if (!q) return true;
         const aiColors = (item.ai && item.ai.colorNames) ? item.ai.colorNames : [];
         const aiLabels = (item.ai && item.ai.labels) ? item.ai.labels : [];
+        const aiDesc = (item.ai && item.ai.description) ? item.ai.description : '';
         const haystack = [
           item.title,
           item.note,
           item.url,
           item.sourceUrl,
+          aiDesc,
           ...(item.tags || []),
           ...aiColors,
           ...aiLabels
@@ -2577,17 +2587,19 @@
 
         showSyncStatus(`Lade ${files.length} Bild(er) hoch…`, true);
         try {
-          for (const file of files) {
+          const { geminiKey } = getSettings();
+          for (let i = 0; i < files.length; i++) {
+            const file = files[i];
             const objUrl = URL.createObjectURL(file);
             const aiColors = await analyzeColorsFromUrl(objUrl);
+            let newItem;
             if (state.mode === 'demo') {
-              URL.revokeObjectURL(objUrl);
               const dataUrl = await new Promise((resolve) => {
                 const reader = new FileReader();
                 reader.onload = () => resolve(reader.result);
                 reader.readAsDataURL(file);
               });
-              content.board.items.unshift({
+              newItem = {
                 id: uid('img'),
                 type: 'image',
                 localDataUrl: dataUrl,
@@ -2596,11 +2608,11 @@
                 note: '',
                 tags: [],
                 ai: { ...aiColors, labels: [] }
-              });
+              };
             } else {
               const uploaded = await DriveAdapter.uploadMultipart(folderId, file.name, file.type, file);
               state.objectUrls.set(uploaded.id, objUrl);
-              content.board.items.unshift({
+              newItem = {
                 id: uid('img'),
                 type: 'image',
                 driveFileId: uploaded.id,
@@ -2609,8 +2621,24 @@
                 note: '',
                 tags: [],
                 ai: { ...aiColors, labels: [] }
-              });
+              };
             }
+            if (geminiKey) {
+              showSyncStatus(`Analysiere Bild ${i + 1}/${files.length} mit Gemini…`, true);
+              try {
+                const gRes = await analyzeImageWithGemini(newItem.localDataUrl || objUrl, geminiKey);
+                if (gRes) {
+                  newItem.ai.description = gRes.description || '';
+                  newItem.ai.labels = gRes.tags || [];
+                  newItem.tags = Array.from(new Set([...newItem.tags, ...newItem.ai.labels]));
+                }
+              } catch (ge) {
+                console.warn('Gemini-Analyse übersprungen:', ge.message);
+              }
+              if (i < files.length - 1) await new Promise((r) => setTimeout(r, 2000));
+            }
+            if (state.mode === 'demo') URL.revokeObjectURL(objUrl);
+            content.board.items.unshift(newItem);
           }
           scheduleBoardSave(folderId);
           renderMainView();
@@ -2734,6 +2762,7 @@
         document.getElementById('clientIdInput').value = s.clientId;
         document.getElementById('rootFolderInput').value = s.rootName;
         document.getElementById('scopeSelect').value = s.scope;
+        document.getElementById('geminiKeyInput').value = s.geminiKey;
         openModal('settingsModal');
       });
 
@@ -2741,6 +2770,7 @@
         localStorage.setItem(LS_KEYS.clientId, document.getElementById('clientIdInput').value.trim());
         localStorage.setItem(LS_KEYS.rootName, document.getElementById('rootFolderInput').value.trim() || 'Moodboards');
         localStorage.setItem(LS_KEYS.scope, document.getElementById('scopeSelect').value);
+        localStorage.setItem(LS_KEYS.geminiKey, document.getElementById('geminiKeyInput').value.trim());
         state.tokenClient = null;
         closeModal('settingsModal');
         initAuthClient();
@@ -4183,6 +4213,55 @@
         return clipWorker;
       }
 
+      async function analyzeImageWithGemini(imageSrc, apiKey) {
+        const base64 = await new Promise((resolve, reject) => {
+          const im = new Image();
+          im.onload = () => {
+            const c = document.createElement('canvas');
+            const scale = Math.min(1, 800 / im.width);
+            c.width = Math.round(im.width * scale);
+            c.height = Math.round(im.height * scale);
+            c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+            resolve(c.toDataURL('image/jpeg', 0.8).split(',')[1]);
+          };
+          im.onerror = () => reject(new Error('Bild konnte nicht gelesen werden'));
+          im.src = imageSrc;
+        });
+
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
+        const body = {
+          contents: [{
+            parts: [
+              {
+                text: 'Analysiere dieses Deko-/Einrichtungs-/Event-Bild für ein Moodboard. Antworte ausschließlich als reines JSON (ohne Markdown-Codeblock) im Format: {"description":"Kurze Suchbeschreibung auf Deutsch mit Motiv, Material, Stil und Farben","tags":["Tag1","Tag2","Tag3","Tag4"]} (maximal 4 präzise deutsche Tags, z. B. "Christbaumkugel", "Salbei", "Glas", "Matt").'
+              },
+              { inline_data: { mime_type: 'image/jpeg', data: base64 } }
+            ]
+          }]
+        };
+
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          });
+          if (res.status === 429 || res.status === 503) {
+            await new Promise((r) => setTimeout(r, 3500 * (attempt + 1)));
+            continue;
+          }
+          if (!res.ok) {
+            const errTxt = await res.text();
+            throw new Error(`Gemini API (${res.status}): ${errTxt.slice(0, 120)}`);
+          }
+          const json = await res.json();
+          const rawText = (json.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
+          const cleaned = rawText.replace(/^```json\s*/i, '').replace(/```$/, '').trim();
+          return JSON.parse(cleaned);
+        }
+        throw new Error('Gemini API vorübergehend überlastet (429/503).');
+      }
+
       async function runAiScanForFolder(folderId) {
         const content = state.folderContents[folderId];
         if (!content) return;
@@ -4209,6 +4288,44 @@
         }
         if (updated) scheduleBoardSave(folderId);
         showSyncStatus('', false);
+
+        const { geminiKey } = getSettings();
+        if (geminiKey) {
+          const rescanAll = confirm(
+            'Gemini API Key erkannt!\n\n' +
+            'Klicke OK, um Bilder ohne Gemini-Beschreibung jetzt automatisch mit Gemini zu verschlagworten (mit 2 Sek. Pause zwischen Bildern).'
+          );
+          if (!rescanAll) { renderMainView(); return; }
+
+          const targets = images.filter((it) => !it.ai.description);
+          const list = targets.length > 0 ? targets : images;
+          for (let i = 0; i < list.length; i++) {
+            const item = list[i];
+            const src = item.localDataUrl || (item.driveFileId && state.mode === 'drive' ? await DriveAdapter.fetchBlobUrl(item.driveFileId) : '');
+            if (!src) continue;
+            showSyncStatus(`Gemini analysiert Bild ${i + 1} von ${list.length}…`, true);
+            try {
+              const gRes = await analyzeImageWithGemini(src, geminiKey);
+              if (gRes) {
+                const prevAiLabels = new Set(item.ai.labels || []);
+                const manualTags = (item.tags || []).filter((t) => !prevAiLabels.has(t));
+                item.ai.description = gRes.description || '';
+                item.ai.labels = Array.isArray(gRes.tags) ? gRes.tags.slice(0, 4) : [];
+                item.tags = Array.from(new Set([...manualTags, ...item.ai.labels]));
+                scheduleBoardSave(folderId);
+              }
+            } catch (err) {
+              console.warn('Gemini Fehler:', err);
+              alert('Gemini-Analyse abgebrochen: ' + err.message);
+              break;
+            }
+            if (i < list.length - 1) await new Promise((r) => setTimeout(r, 2000));
+          }
+          showSyncStatus('Gemini-Bildanalyse abgeschlossen!', true);
+          setTimeout(() => showSyncStatus('', false), 2200);
+          renderMainView();
+          return;
+        }
 
         const useClip = confirm(
           'Farbbegriffe (z. B. „salbei“, „gold“, „beige“) wurden sofort ergänzt!\n\n' +
