@@ -1428,8 +1428,9 @@
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="itemTagsInput">Tags (kommagetrennt)</label>
-        <input id="itemTagsInput" class="form-control" type="text" placeholder="salbei, kerze, esstisch" />
+        <label class="form-label">Tags (Mehrfachauswahl aus deiner Tag-Liste)</label>
+        <div id="itemTagPicker" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px;"></div>
+        <div class="form-hint">Neue Tags kannst du in der Galerie über „🏷️ Tags verwalten“ anlegen.</div>
       </div>
 
       <div style="border-top:1px solid var(--border-color); padding-top:12px; margin-top:12px;">
@@ -1550,6 +1551,29 @@
     </div>
   </div>
 
+  <!-- ======================================================================
+       MODAL: GLOBALE TAG-LISTE VERWALTEN
+       ====================================================================== -->
+  <div id="tagsManagerModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="tagsManagerTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="tagsManagerTitle" class="modal-title">🏷️ Tag-System verwalten</h2>
+        <button class="btn-icon" data-close-modal="tagsManagerModal" type="button">✕</button>
+      </div>
+      <p style="font-size:0.84rem; color:var(--text-secondary); margin-top:0;">
+        Nur diese Tags können händisch oder von der KI vergeben werden. Einmal gesetzte Tags einer Karte werden von der KI nicht mehr überschrieben.
+      </p>
+      <div style="display:flex; gap:8px; margin-bottom:14px;">
+        <input id="newGlobalTagInput" class="form-control" type="text" placeholder="Neuer Tag (z. B. Skandi, Kerze, Salbei)..." />
+        <button id="addGlobalTagBtn" class="btn btn-oak btn-sm" type="button">＋ Hinzufügen</button>
+      </div>
+      <div id="globalTagsList" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" data-close-modal="tagsManagerModal" type="button">Fertig</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     (function () {
       'use strict';
@@ -1601,7 +1625,11 @@
         eyedropperPickedHex: '#C59B6D',
         canvasSplitOpen: false,
         shopFilter: 'all',
-        todoFilter: 'Alle'
+        todoFilter: 'Alle',
+        globalTags: ['Christbaum', 'Tischdeko', 'Beleuchtung', 'Möbel', 'Textilien', 'Keramik', 'Holz', 'Glas', 'Metall', 'Naturmaterial'],
+        tagsFileId: null,
+        activeTagFilters: new Set(),
+        editingItemTags: new Set()
       };
 
       /* ========================================================================
@@ -1934,11 +1962,76 @@
       /* ========================================================================
          6. WORKSPACE & ORDNER LADEN + SPEICHERN (MIT KONFLIKTSCHUTZ)
          ======================================================================== */
+      async function loadGlobalTagsDrive() {
+        if (!state.rootFolderId || state.mode !== 'drive') return;
+        try {
+          const files = await DriveAdapter.listFolderFiles(state.rootFolderId);
+          const tagFile = files.find((f) => f.name === 'tags.json');
+          if (tagFile) {
+            state.tagsFileId = tagFile.id;
+            const data = await DriveAdapter.downloadJson(tagFile.id);
+            if (Array.isArray(data.tags)) state.globalTags = data.tags;
+          } else {
+            await saveGlobalTags();
+          }
+        } catch (e) {
+          console.warn('tags.json konnte nicht geladen werden:', e);
+        }
+      }
+
+      async function saveGlobalTags() {
+        if (state.mode === 'demo') {
+          const demo = DemoAdapter.load();
+          demo.globalTags = state.globalTags;
+          DemoAdapter.save(demo);
+          return;
+        }
+        if (state.mode !== 'drive' || !state.rootFolderId || !state.accessToken) return;
+        try {
+          const blob = new Blob([JSON.stringify({ tags: state.globalTags }, null, 2)], { type: 'application/json' });
+          const saved = await DriveAdapter.uploadMultipart(state.rootFolderId, 'tags.json', 'application/json', blob, state.tagsFileId);
+          state.tagsFileId = saved.id;
+        } catch (e) {
+          console.warn('tags.json konnte nicht gespeichert werden:', e);
+        }
+      }
+
+      function renderGlobalTagsManager() {
+        const listEl = document.getElementById('globalTagsList');
+        if (state.globalTags.length === 0) {
+          listEl.innerHTML = '<span style="font-size:0.84rem; color:var(--text-muted);">Noch keine Tags angelegt.</span>';
+          return;
+        }
+        listEl.innerHTML = state.globalTags.map((tag, idx) => `
+          <span class="meta-pill" style="padding-right:6px;">
+            <span>#${escapeHtml(tag)}</span>
+            <button class="btn-icon" data-del-gtag="${idx}" type="button" style="width:20px; height:20px; font-size:0.7rem;" title="Tag löschen">✕</button>
+          </span>
+        `).join('');
+        listEl.querySelectorAll('[data-del-gtag]').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const idx = Number(btn.getAttribute('data-del-gtag'));
+            const removed = state.globalTags[idx];
+            state.globalTags.splice(idx, 1);
+            state.activeTagFilters.delete(removed);
+            renderGlobalTagsManager();
+            await saveGlobalTags();
+            renderMainView();
+          });
+        });
+      }
+
+      function openTagsManagerModal() {
+        renderGlobalTagsManager();
+        openModal('tagsManagerModal');
+      }
+
       async function loadDriveWorkspace() {
         showSyncStatus('Lade Ordnerstruktur aus Google Drive…', true);
         try {
           const { rootName } = getSettings();
           state.rootFolderId = await DriveAdapter.ensureRootFolder(rootName);
+          await loadGlobalTagsDrive();
           state.folders = await DriveAdapter.listAllSubfolders(state.rootFolderId);
           state.expandedFolders.add(state.rootFolderId);
 
@@ -1965,6 +2058,7 @@
         document.getElementById('demoBanner').classList.remove('hidden');
         document.getElementById('tokenExpiredBanner').classList.add('hidden');
         const demo = DemoAdapter.load();
+        if (Array.isArray(demo.globalTags)) state.globalTags = demo.globalTags;
         state.rootFolderId = demo.rootFolderId;
         state.folders = demo.folders;
         state.expandedFolders.add(demo.rootFolderId);
@@ -2339,6 +2433,12 @@
       }
 
       function matchesSearch(item) {
+        if (state.activeTagFilters.size > 0) {
+          const itemTagsLower = new Set((item.tags || []).map((t) => t.toLowerCase()));
+          for (const reqTag of state.activeTagFilters) {
+            if (!itemTagsLower.has(reqTag.toLowerCase())) return false;
+          }
+        }
         const q = state.searchQuery.trim().toLowerCase();
         if (!q) return true;
         const aiColors = (item.ai && item.ai.colorNames) ? item.ai.colorNames : [];
@@ -2385,13 +2485,27 @@
 
         container.innerHTML = `
           <div class="gallery-toolbar">
-            <div class="pill-group">
-              <button class="pill-btn ${state.galleryMode === 'grid' ? 'active' : ''}" data-gmode="grid" type="button">Kacheln</button>
-              <button class="pill-btn ${state.galleryMode === 'list' ? 'active' : ''}" data-gmode="list" type="button">Liste</button>
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <div class="pill-group">
+                <button class="pill-btn ${state.galleryMode === 'grid' ? 'active' : ''}" data-gmode="grid" type="button">Kacheln</button>
+                <button class="pill-btn ${state.galleryMode === 'list' ? 'active' : ''}" data-gmode="list" type="button">Liste</button>
+              </div>
+              <button id="manageTagsBtn" class="btn btn-sm" type="button">🏷️ Tags verwalten</button>
             </div>
             <div style="font-size:0.8rem; color:var(--text-muted);">
               Tipp: Bilder einfach hierher ziehen oder per „＋ Bild“ hochladen.
             </div>
+          </div>
+
+          <div style="display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-bottom:14px;">
+            <span style="font-size:0.76rem; color:var(--text-muted); margin-right:4px;">Tag-Filter (Mehrfachauswahl):</span>
+            ${state.activeTagFilters.size > 0
+              ? '<button id="clearTagFiltersBtn" class="pill-btn" type="button" style="border:1px solid var(--border-color);">✕ Alle zurücksetzen</button>'
+              : ''}
+            ${state.globalTags.map((tag) => {
+              const active = state.activeTagFilters.has(tag);
+              return `<button class="pill-btn ${active ? 'active' : ''}" data-tag-filter="${escapeHtml(tag)}" type="button" style="border:1px solid ${active ? 'var(--accent-oak)' : 'var(--border-color)'};">#${escapeHtml(tag)}</button>`;
+            }).join('')}
           </div>
 
           <div id="galleryDropzone" class="dropzone">
@@ -2403,6 +2517,23 @@
             ${docs.map((df) => renderDriveDocCardHtml(df)).join('')}
           </div>
         `;
+
+        document.getElementById('manageTagsBtn').addEventListener('click', openTagsManagerModal);
+        const clearBtn = document.getElementById('clearTagFiltersBtn');
+        if (clearBtn) {
+          clearBtn.addEventListener('click', () => {
+            state.activeTagFilters.clear();
+            renderGalleryView(container, statsEl, folderId);
+          });
+        }
+        container.querySelectorAll('[data-tag-filter]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const t = btn.getAttribute('data-tag-filter');
+            if (state.activeTagFilters.has(t)) state.activeTagFilters.delete(t);
+            else state.activeTagFilters.add(t);
+            renderGalleryView(container, statsEl, folderId);
+          });
+        });
 
         container.querySelectorAll('[data-gmode]').forEach((btn) => {
           btn.addEventListener('click', () => {
@@ -2428,7 +2559,7 @@
 
       function renderItemCardHtml(item, folderLabel = '') {
         const badge = item.type === 'image' ? 'Bild' : 'Bookmark';
-        const tagsHtml = (item.tags || []).slice(0, 3).map((t) => `#${escapeHtml(t)}`).join(' ');
+        const tagsHtml = (item.tags || []).map((t) => `<span style="display:inline-block; padding:1px 6px; border-radius:999px; background:var(--card-subtle); border:1px solid var(--border-color); font-size:0.7rem;">#${escapeHtml(t)}</span>`).join(' ');
         const thumbSrc = item.type === 'image'
           ? (item.localDataUrl || '')
           : (item.previewImageUrl || '');
@@ -2680,6 +2811,27 @@
         document.getElementById(id).classList.add('hidden');
       }
 
+      function renderItemTagPicker() {
+        const picker = document.getElementById('itemTagPicker');
+        const allOptions = Array.from(new Set([...state.globalTags, ...state.editingItemTags]));
+        if (allOptions.length === 0) {
+          picker.innerHTML = '<span style="font-size:0.8rem; color:var(--text-muted);">Noch keine Tags angelegt.</span>';
+          return;
+        }
+        picker.innerHTML = allOptions.map((tag) => {
+          const active = state.editingItemTags.has(tag);
+          return `<button type="button" class="pill-btn ${active ? 'active' : ''}" data-pick-tag="${escapeHtml(tag)}" style="border:1px solid ${active ? 'var(--accent-oak)' : 'var(--border-color)'};">#${escapeHtml(tag)}</button>`;
+        }).join('');
+        picker.querySelectorAll('[data-pick-tag]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const t = btn.getAttribute('data-pick-tag');
+            if (state.editingItemTags.has(t)) state.editingItemTags.delete(t);
+            else state.editingItemTags.add(t);
+            renderItemTagPicker();
+          });
+        });
+      }
+
       function openItemModal(item = null) {
         if (!state.activeFolderId && !item) {
           alert('Bitte wähle zuerst einen Projektordner aus.');
@@ -2692,7 +2844,8 @@
         document.getElementById('itemUrlInput').value = item ? (item.url || item.sourceUrl || '') : '';
         document.getElementById('itemPreviewInput').value = item ? (item.previewImageUrl || '') : '';
         document.getElementById('itemNoteInput').value = item ? (item.note || '') : '';
-        document.getElementById('itemTagsInput').value = item ? (item.tags || []).join(', ') : '';
+        state.editingItemTags = new Set(item && Array.isArray(item.tags) ? item.tags : []);
+        renderItemTagPicker();
         document.getElementById('itemPreviewGroup').style.display = isBookmark ? 'block' : 'none';
         const shop = item && item.shopping ? item.shopping : { enabled: false, price: '', quantity: 1, status: 'idea' };
         document.getElementById('itemShopEnabled').checked = !!shop.enabled;
@@ -2805,7 +2958,7 @@
         const url = document.getElementById('itemUrlInput').value.trim();
         const previewImageUrl = document.getElementById('itemPreviewInput').value.trim();
         const note = document.getElementById('itemNoteInput').value.trim();
-        const tags = document.getElementById('itemTagsInput').value.split(',').map((t) => t.trim()).filter(Boolean);
+        const tags = Array.from(state.editingItemTags);
         const shopping = {
           enabled: document.getElementById('itemShopEnabled').checked,
           price: Math.max(0, parseFloat(document.getElementById('itemShopPrice').value) || 0),
@@ -4254,11 +4407,16 @@
 
         const modelName = await resolveGeminiModel(apiKey);
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+        const allowedTags = state.globalTags || [];
+        const tagInstruction = allowedTags.length > 0
+          ? `Wähle für "tags" AUSSCHLIESSLICH passende Begriffe aus dieser festen Liste (erfinde KEINE neuen Tags, max. 4): ${JSON.stringify(allowedTags)}.`
+          : 'Lasse "tags" als leeres Array [].';
+
         const body = {
           contents: [{
             parts: [
               {
-                text: 'Analysiere dieses Deko-/Einrichtungs-/Event-Bild für ein Moodboard. Antworte als JSON mit: {"title":"Kurzer deutscher Bildtitel (max 6 Wörter)","description":"Prägnante Beschreibung auf Deutsch (1-2 Sätze zu Motiv, Material, Stil, Farben)","tags":["Tag1","Tag2","Tag3","Tag4"]}.'
+                text: `Analysiere dieses Deko-/Einrichtungs-/Event-Bild für ein Inventar. Schreibe strikt sachlich, knapp und faktisch (KEINE Werbesprache, keine Wörter wie "edel", "besticht", "bezaubernd", "perfekt", "traumhaft"). ${tagInstruction} Antworte als JSON: {"title":"Sachlicher Objektname (max. 6 Wörter, z.B. Dunkelgrüne Christbaumkugeln matt & glänzend)","description":"Reine Faktenbeschreibung für die Suche: Objektart, Farbe, Material, Oberfläche, Form, Anzahl/Set (1-2 kurze Sätze)","tags":[]}.`
               },
               { inline_data: { mime_type: 'image/jpeg', data: base64 } }
             ]
@@ -4266,7 +4424,7 @@
           generationConfig: {
             responseMimeType: 'application/json',
             maxOutputTokens: 512,
-            temperature: 0.2
+            temperature: 0.1
           }
         };
 
@@ -4304,11 +4462,17 @@
       function applyGeminiResultToItem(item, gRes, isNewUpload = false) {
         if (!gRes) return;
         if (!item.ai) item.ai = { colors: [], colorNames: [], labels: [] };
-        const prevAiLabels = new Set(item.ai.labels || []);
-        const manualTags = (item.tags || []).filter((t) => !prevAiLabels.has(t));
         item.ai.description = gRes.description || '';
-        item.ai.labels = Array.isArray(gRes.tags) ? gRes.tags.slice(0, 4) : [];
-        item.tags = Array.from(new Set([...manualTags, ...item.ai.labels]));
+
+        // Tags nur setzen, wenn die Karte noch KEINE Tags hat – und strikt aus state.globalTags filtern
+        if (!Array.isArray(item.tags) || item.tags.length === 0) {
+          const allowedMap = new Map(state.globalTags.map((t) => [t.toLowerCase(), t]));
+          const picked = (Array.isArray(gRes.tags) ? gRes.tags : [])
+            .map((t) => allowedMap.get(String(t).trim().toLowerCase()))
+            .filter(Boolean);
+          item.ai.labels = Array.from(new Set(picked));
+          item.tags = [...item.ai.labels];
+        }
 
         if (gRes.title) {
           item.title = gRes.title;
@@ -4571,6 +4735,24 @@
 
       document.getElementById('geminiPdfBtn').addEventListener('click', () => {
         exportFolderToGeminiPdf(state.activeFolderId);
+      });
+
+      async function addGlobalTagFromInput() {
+        const inp = document.getElementById('newGlobalTagInput');
+        const val = inp.value.trim().replace(/^#/, '');
+        if (!val) return;
+        if (!state.globalTags.some((t) => t.toLowerCase() === val.toLowerCase())) {
+          state.globalTags.push(val);
+          await saveGlobalTags();
+          renderGlobalTagsManager();
+          renderMainView();
+        }
+        inp.value = '';
+      }
+
+      document.getElementById('addGlobalTagBtn').addEventListener('click', addGlobalTagFromInput);
+      document.getElementById('newGlobalTagInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); addGlobalTagFromInput(); }
       });
 
       // Init
