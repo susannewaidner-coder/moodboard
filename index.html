@@ -1,0 +1,2312 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#F8F7F4" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>Moodboard &amp; Projekt-Planer — Google Drive</title>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <style>
+    /* ==========================================================================
+       1. DESIGN-SYSTEM & CSS CUSTOM PROPERTIES (angelehnt an index.html)
+       ========================================================================== */
+    :root {
+      --bg-color: #F8F7F4;
+      --card-bg: #FFFFFF;
+      --card-subtle: #F2EFE9;
+      --border-color: #E5E2DC;
+      --text-primary: #2C2E2D;
+      --text-secondary: #686B68;
+      --text-muted: #8E918D;
+
+      --accent-oak: #C59B6D;
+      --accent-oak-hover: #B08658;
+      --accent-oak-light: #DFC3A3;
+      --accent-sage: #A9B8A6;
+      --accent-sage-dark: #7E917A;
+      --accent-fir: #2E4A3E;
+      --accent-fir-light: #3E6353;
+      --accent-gold: #D4AF37;
+      --danger: #B85450;
+      --danger-bg: rgba(184, 84, 80, 0.1);
+      --warning: #B8862D;
+      --warning-bg: rgba(212, 175, 55, 0.15);
+
+      --shadow-sm: 0 2px 8px rgba(44, 46, 45, 0.05);
+      --shadow-md: 0 10px 28px rgba(44, 46, 45, 0.09);
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 18px;
+      --radius-pill: 999px;
+      --sidebar-width: 280px;
+      --header-height: 64px;
+      --transition-theme: background-color 0.35s ease, color 0.3s ease, border-color 0.3s ease;
+    }
+
+    body.evening-mode {
+      --bg-color: #1A1C1B;
+      --card-bg: #242725;
+      --card-subtle: #2C302D;
+      --border-color: #363A38;
+      --text-primary: #F2EFE9;
+      --text-secondary: #B4B8B4;
+      --text-muted: #828783;
+      --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.28);
+      --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.42);
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-primary);
+      line-height: 1.5;
+      transition: var(--transition-theme);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button, input, textarea, select {
+      font-family: inherit;
+      color: inherit;
+    }
+
+    a {
+      color: var(--accent-oak-hover);
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+
+    /* ==========================================================================
+       2. APP-SHELL & LAYOUT
+       ========================================================================== */
+    .app-shell {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      width: var(--sidebar-width);
+      flex-shrink: 0;
+      background-color: var(--card-bg);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      position: sticky;
+      top: 0;
+      transition: var(--transition-theme), transform 0.25s ease;
+      z-index: 40;
+    }
+
+    .sidebar-header {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .brand-title {
+      font-size: 0.98rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent-oak), var(--accent-fir));
+      flex-shrink: 0;
+    }
+
+    .sidebar-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 10px;
+    }
+
+    .sidebar-section-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      padding: 10px 10px 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 0.88rem;
+      color: var(--text-secondary);
+      border: none;
+      background: transparent;
+      width: 100%;
+      text-align: left;
+      transition: background-color 0.15s ease, color 0.15s ease;
+    }
+
+    .nav-item:hover {
+      background-color: var(--card-subtle);
+      color: var(--text-primary);
+    }
+
+    .nav-item.active {
+      background-color: var(--card-subtle);
+      color: var(--text-primary);
+      font-weight: 600;
+      box-shadow: inset 3px 0 0 var(--accent-oak);
+    }
+
+    .tree-node {
+      user-select: none;
+    }
+
+    .tree-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 8px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 0.87rem;
+      color: var(--text-secondary);
+      transition: background-color 0.15s ease;
+    }
+
+    .tree-row:hover {
+      background-color: var(--card-subtle);
+      color: var(--text-primary);
+    }
+
+    .tree-row.active {
+      background-color: var(--card-subtle);
+      color: var(--text-primary);
+      font-weight: 600;
+      box-shadow: inset 3px 0 0 var(--accent-oak);
+    }
+
+    .tree-toggle {
+      width: 18px;
+      height: 18px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      font-size: 0.72rem;
+      flex-shrink: 0;
+    }
+
+    .tree-label {
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .tree-actions {
+      display: none;
+      gap: 2px;
+    }
+
+    .tree-row:hover .tree-actions,
+    .tree-row.active .tree-actions {
+      display: inline-flex;
+    }
+
+    .tree-children {
+      padding-left: 16px;
+    }
+
+    .sidebar-footer {
+      padding: 12px 14px;
+      border-top: 1px solid var(--border-color);
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .main-area {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      background-color: var(--bg-color);
+      border-bottom: 1px solid var(--border-color);
+      padding: 12px 20px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+      transition: var(--transition-theme);
+    }
+
+    .mobile-menu-btn {
+      display: none;
+    }
+
+    .search-box {
+      flex: 1;
+      min-width: 200px;
+      max-width: 460px;
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 9px 14px 9px 36px;
+      border-radius: var(--radius-pill);
+      border: 1px solid var(--border-color);
+      background-color: var(--card-bg);
+      font-size: 0.88rem;
+      outline: none;
+      transition: border-color 0.2s ease;
+    }
+
+    .search-input:focus {
+      border-color: var(--accent-oak);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 12px;
+      color: var(--text-muted);
+      pointer-events: none;
+      font-size: 0.9rem;
+    }
+
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+      flex-wrap: wrap;
+    }
+
+    /* ==========================================================================
+       3. BUTTONS, BADGES & BANNERS
+       ========================================================================== */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border-radius: var(--radius-pill);
+      border: 1px solid var(--border-color);
+      background-color: var(--card-bg);
+      color: var(--text-primary);
+      font-size: 0.84rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+
+    .btn:hover {
+      border-color: var(--accent-oak);
+      transform: translateY(-1px);
+    }
+
+    .btn-primary {
+      background-color: var(--accent-fir);
+      border-color: var(--accent-fir);
+      color: #FFFFFF;
+    }
+
+    .btn-primary:hover {
+      background-color: var(--accent-fir-light);
+      border-color: var(--accent-fir-light);
+    }
+
+    .btn-oak {
+      background-color: var(--accent-oak);
+      border-color: var(--accent-oak);
+      color: #FFFFFF;
+    }
+
+    .btn-oak:hover {
+      background-color: var(--accent-oak-hover);
+      border-color: var(--accent-oak-hover);
+    }
+
+    .btn-sm {
+      padding: 4px 10px;
+      font-size: 0.78rem;
+    }
+
+    .btn-icon {
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border-radius: var(--radius-sm);
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .btn-icon:hover {
+      background-color: var(--card-subtle);
+      color: var(--text-primary);
+    }
+
+    .status-banner {
+      padding: 10px 20px;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .status-banner.warning {
+      background-color: var(--warning-bg);
+      color: var(--text-primary);
+    }
+
+    .status-banner.danger {
+      background-color: var(--danger-bg);
+      color: var(--text-primary);
+    }
+
+    .status-banner.hidden {
+      display: none;
+    }
+
+    /* ==========================================================================
+       4. SUBHEADER, VIEW-TABS & WORKSPACE
+       ========================================================================== */
+    .workspace-header {
+      padding: 18px 24px 0;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    .breadcrumb {
+      font-size: 0.76rem;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .folder-heading {
+      margin: 0;
+      font-size: 1.45rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    .view-tabs {
+      display: flex;
+      gap: 6px;
+      padding: 14px 24px 0;
+      border-bottom: 1px solid var(--border-color);
+      overflow-x: auto;
+    }
+
+    .view-tab {
+      padding: 9px 16px;
+      border: none;
+      border-bottom: 2px solid transparent;
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 0.88rem;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: color 0.15s ease, border-color 0.15s ease;
+    }
+
+    .view-tab:hover {
+      color: var(--text-primary);
+    }
+
+    .view-tab.active {
+      color: var(--text-primary);
+      font-weight: 600;
+      border-bottom-color: var(--accent-oak);
+    }
+
+    .view-content {
+      padding: 22px 24px 60px;
+      flex: 1;
+    }
+
+    /* ==========================================================================
+       5. GALERIE / RAINDROP-ANSICHT
+       ========================================================================== */
+    .gallery-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    .pill-group {
+      display: inline-flex;
+      background-color: var(--card-subtle);
+      padding: 3px;
+      border-radius: var(--radius-pill);
+      border: 1px solid var(--border-color);
+      gap: 2px;
+    }
+
+    .pill-btn {
+      padding: 5px 12px;
+      border: none;
+      border-radius: var(--radius-pill);
+      background: transparent;
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+
+    .pill-btn.active {
+      background-color: var(--card-bg);
+      color: var(--text-primary);
+      font-weight: 600;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .dropzone {
+      border: 2px dashed var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 28px 20px;
+      text-align: center;
+      color: var(--text-secondary);
+      background-color: var(--card-subtle);
+      margin-bottom: 20px;
+      transition: border-color 0.2s ease, background-color 0.2s ease;
+      cursor: pointer;
+    }
+
+    .dropzone.dragover {
+      border-color: var(--accent-oak);
+      background-color: var(--card-bg);
+    }
+
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+      gap: 18px;
+    }
+
+    .gallery-grid.list-mode {
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+
+    .item-card {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .item-card:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
+    }
+
+    .gallery-grid.list-mode .item-card {
+      flex-direction: row;
+      align-items: center;
+      padding: 8px 12px;
+      gap: 14px;
+    }
+
+    .item-thumb {
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      background-color: var(--card-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+      cursor: pointer;
+    }
+
+    .gallery-grid.list-mode .item-thumb {
+      width: 72px;
+      height: 54px;
+      aspect-ratio: auto;
+      border-radius: var(--radius-sm);
+      flex-shrink: 0;
+    }
+
+    .item-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .item-type-badge {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      padding: 3px 8px;
+      border-radius: var(--radius-pill);
+      background-color: rgba(26, 28, 27, 0.72);
+      color: #FFFFFF;
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
+
+    .gallery-grid.list-mode .item-type-badge {
+      display: none;
+    }
+
+    .item-body {
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex: 1;
+    }
+
+    .gallery-grid.list-mode .item-body {
+      padding: 0;
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .item-title {
+      font-size: 0.92rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin: 0;
+      word-break: break-word;
+    }
+
+    .item-note {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      margin: 0;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .item-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: auto;
+      padding-top: 6px;
+      font-size: 0.76rem;
+      color: var(--text-muted);
+    }
+
+    .item-actions {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+
+    .doc-icon-box {
+      font-size: 2rem;
+      color: var(--accent-oak);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .doc-icon-label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    /* ==========================================================================
+       6. MODALS & ONBOARDING
+       ========================================================================== */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background-color: rgba(26, 28, 27, 0.55);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      z-index: 100;
+    }
+
+    .modal-backdrop.hidden {
+      display: none;
+    }
+
+    .modal-card {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-md);
+      width: 100%;
+      max-width: 540px;
+      max-height: 90vh;
+      overflow-y: auto;
+      padding: 24px;
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .modal-title {
+      margin: 0;
+      font-size: 1.15rem;
+      font-weight: 600;
+    }
+
+    .form-group {
+      margin-bottom: 14px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 0.82rem;
+      font-weight: 600;
+      margin-bottom: 5px;
+      color: var(--text-secondary);
+    }
+
+    .form-control {
+      width: 100%;
+      padding: 9px 12px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-color);
+      background-color: var(--bg-color);
+      font-size: 0.9rem;
+      outline: none;
+    }
+
+    .form-control:focus {
+      border-color: var(--accent-oak);
+    }
+
+    .form-hint {
+      font-size: 0.76rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 48px 20px;
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      max-width: 620px;
+      margin: 24px auto;
+    }
+
+    .empty-state h2 {
+      margin: 0 0 10px;
+      font-size: 1.3rem;
+    }
+
+    .empty-state p {
+      color: var(--text-secondary);
+      margin: 0 0 20px;
+      font-size: 0.94rem;
+    }
+
+    .phase-placeholder {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 32px 24px;
+      text-align: center;
+      color: var(--text-secondary);
+    }
+
+    .sidebar-overlay {
+      display: none;
+    }
+
+    /* ==========================================================================
+       7. RESPONSIVE (TABLET & HANDY)
+       ========================================================================== */
+    @media (max-width: 860px) {
+      .sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        transform: translateX(-100%);
+      }
+
+      .sidebar.open {
+        transform: translateX(0);
+      }
+
+      .sidebar-overlay.open {
+        display: block;
+        position: fixed;
+        inset: 0;
+        background-color: rgba(0, 0, 0, 0.45);
+        z-index: 35;
+      }
+
+      .mobile-menu-btn {
+        display: inline-flex;
+      }
+
+      .workspace-header, .view-tabs, .view-content {
+        padding-left: 16px;
+        padding-right: 16px;
+      }
+
+      .topbar {
+        padding: 10px 14px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <div id="sidebarOverlay" class="sidebar-overlay"></div>
+
+    <!-- ======================================================================
+         LINKE SEITENLEISTE: ORDNERBAUM & SCHNELLSICHTEN
+         ====================================================================== -->
+    <aside id="sidebar" class="sidebar" aria-label="Projekt-Navigation">
+      <div class="sidebar-header">
+        <div class="brand-title">
+          <span class="brand-dot" aria-hidden="true"></span>
+          <span>Moodboard Drive</span>
+        </div>
+        <button id="closeSidebarBtn" class="btn-icon mobile-menu-btn" type="button" title="Menü schließen">✕</button>
+      </div>
+
+      <div class="sidebar-scroll">
+        <div class="sidebar-section-label">Schnellsichten</div>
+        <button class="nav-item" data-quick="all" type="button">
+          <span>🗂️</span> <span>Alle geladenen Elemente</span>
+        </button>
+        <button class="nav-item" data-quick="shopping" type="button">
+          <span>🛒</span> <span>Einkaufsliste (Phase 3)</span>
+        </button>
+        <button class="nav-item" data-quick="todos" type="button">
+          <span>☑️</span> <span>Offene To-dos (Phase 3)</span>
+        </button>
+
+        <div class="sidebar-section-label">
+          <span>Projekte &amp; Ordner</span>
+          <button id="newRootFolderBtn" class="btn-icon" type="button" title="Neues Hauptprojekt anlegen">＋</button>
+        </div>
+        <div id="folderTree"></div>
+      </div>
+
+      <div class="sidebar-footer">
+        <div id="authStatusText">Nicht verbunden</div>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <button id="authActionBtn" class="btn btn-primary btn-sm" type="button">Mit Google verbinden</button>
+          <button id="openSettingsBtn" class="btn btn-sm" type="button">⚙️</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ======================================================================
+         HAUPTBEREICH
+         ====================================================================== -->
+    <div class="main-area">
+      <header class="topbar">
+        <button id="openSidebarBtn" class="btn btn-sm mobile-menu-btn" type="button">☰ Ordner</button>
+
+        <div class="search-box">
+          <span class="search-icon" aria-hidden="true">🔍</span>
+          <input id="searchInput" class="search-input" type="search" placeholder="Suche nach Titel, Notiz, URL, Tag..." />
+        </div>
+
+        <div class="topbar-actions">
+          <button id="addImageBtn" class="btn btn-oak btn-sm" type="button">＋ Bild</button>
+          <button id="addBookmarkBtn" class="btn btn-sm" type="button">🔗 Bookmark</button>
+          <button id="addDocBtn" class="btn btn-sm" type="button" title="Neues Google Doc im Ordner anlegen">📄 Doc</button>
+          <button id="themeToggleBtn" class="btn btn-sm" type="button" title="Tag-/Abend-Modus wechseln">☀️ Tag</button>
+        </div>
+      </header>
+
+      <!-- Banner für Token-Ablauf (401) & Demo-Hinweis -->
+      <div id="tokenExpiredBanner" class="status-banner danger hidden">
+        <span>⚠️ Google-Sitzung abgelaufen – deine letzten Änderungen sind lokal gesichert.</span>
+        <button id="renewSessionBtn" class="btn btn-primary btn-sm" type="button">Sitzung erneuern &amp; speichern</button>
+      </div>
+
+      <div id="demoBanner" class="status-banner warning hidden">
+        <span>🧪 <strong>Lokaler Demo-Modus aktiv:</strong> Daten werden nur in diesem Browser gespeichert (kein Google Drive).</span>
+        <button id="exitDemoBtn" class="btn btn-sm" type="button">Zu Google Drive wechseln</button>
+      </div>
+
+      <div id="syncStatusBanner" class="status-banner warning hidden">
+        <span id="syncStatusText">Synchronisiere…</span>
+      </div>
+
+      <div class="workspace-header">
+        <div>
+          <div id="breadcrumb" class="breadcrumb">Moodboards</div>
+          <h1 id="folderTitle" class="folder-heading">Willkommen</h1>
+        </div>
+        <div id="folderStats" style="font-size:0.82rem; color:var(--text-muted);"></div>
+      </div>
+
+      <nav class="view-tabs" aria-label="Ansichten">
+        <button class="view-tab active" data-view="gallery" type="button">🖼️ Galerie &amp; Dateien</button>
+        <button class="view-tab" data-view="home" type="button">🏠 Projekt-Startseite</button>
+        <button class="view-tab" data-view="canvas" type="button">🎨 Moodboard-Canvas</button>
+        <button class="view-tab" data-view="planning" type="button">📋 To-dos &amp; Budget</button>
+      </nav>
+
+      <main id="viewContainer" class="view-content"></main>
+    </div>
+  </div>
+
+  <!-- Versteckter File-Input für Upload / Handy-Kamera -->
+  <input id="fileUploadInput" type="file" accept="image/*" multiple style="display:none;" />
+
+  <!-- ======================================================================
+       MODAL: EINSTELLUNGEN (OAUTH CLIENT-ID & SCOPE)
+       ====================================================================== -->
+  <div id="settingsModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="settingsModalTitle" class="modal-title">Google Drive Einrichtung</h2>
+        <button class="btn-icon" data-close-modal="settingsModal" type="button">✕</button>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="clientIdInput">Google OAuth Client-ID (Webanwendung)</label>
+        <input id="clientIdInput" class="form-control" type="text" placeholder="1234567890-abc...apps.googleusercontent.com" />
+        <div class="form-hint">Wird nur lokal in deinem Browser gespeichert (<code>localStorage</code>).</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="rootFolderInput">Root-Ordnername in Google Drive</label>
+        <input id="rootFolderInput" class="form-control" type="text" value="Moodboards" />
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="scopeSelect">Google Drive Berechtigung (Scope)</label>
+        <select id="scopeSelect" class="form-control">
+          <option value="https://www.googleapis.com/auth/drive.file">drive.file (Empfohlen – App-eigene Dateien, keine Verifizierung nötig)</option>
+          <option value="https://www.googleapis.com/auth/drive">drive (Vollzugriff – sieht auch manuell in Drive abgelegte Dateien)</option>
+        </select>
+      </div>
+
+      <details style="font-size:0.82rem; color:var(--text-secondary); margin-top:10px; background:var(--card-subtle); padding:10px 12px; border-radius:var(--radius-sm);">
+        <summary style="cursor:pointer; font-weight:600; color:var(--text-primary);">Kurzanleitung: Client-ID erstellen</summary>
+        <ol style="padding-left:18px; margin:8px 0 0;">
+          <li>In der <a href="https://console.cloud.google.com/" target="_blank" rel="noopener">Google Cloud Console</a> ein kostenloses Projekt anlegen.</li>
+          <li>Unter <em>APIs &amp; Dienste → Bibliothek</em> die <strong>Google Drive API</strong> aktivieren.</li>
+          <li>Unter <em>OAuth-Zustimmungsbildschirm</em> „Extern“ wählen und deine eigene Gmail-Adresse als <strong>Testnutzer</strong> eintragen.</li>
+          <li>Unter <em>Anmeldedaten → OAuth-Client-ID erstellen</em> „Webanwendung“ wählen und deine GitHub-Pages-URL (z. B. <code>https://deinname.github.io</code>) bei <strong>Autorisierte JavaScript-Ursprünge</strong> eintragen.</li>
+        </ol>
+      </details>
+
+      <div class="modal-footer">
+        <button class="btn" data-close-modal="settingsModal" type="button">Abbrechen</button>
+        <button id="saveSettingsBtn" class="btn btn-primary" type="button">Speichern</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================
+       MODAL: WEB-BOOKMARK HINZUFÜGEN / BEARBEITEN
+       ====================================================================== -->
+  <div id="itemModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="itemModalTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="itemModalTitle" class="modal-title">Element bearbeiten</h2>
+        <button class="btn-icon" data-close-modal="itemModal" type="button">✕</button>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="itemTitleInput">Titel</label>
+        <input id="itemTitleInput" class="form-control" type="text" placeholder="z. B. Stabkerzen Salbei" />
+      </div>
+
+      <div class="form-group" id="itemUrlGroup">
+        <label class="form-label" for="itemUrlInput">Webseiten- / Shop-URL</label>
+        <input id="itemUrlInput" class="form-control" type="url" placeholder="https://..." />
+      </div>
+
+      <div class="form-group" id="itemPreviewGroup">
+        <label class="form-label" for="itemPreviewInput">Vorschaubild-URL (optional)</label>
+        <input id="itemPreviewInput" class="form-control" type="url" placeholder="https://.../bild.jpg" />
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="itemNoteInput">Notiz</label>
+        <textarea id="itemNoteInput" class="form-control" rows="3" placeholder="Maße, Farbhinweis, Material..."></textarea>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="itemTagsInput">Tags (kommagetrennt)</label>
+        <input id="itemTagsInput" class="form-control" type="text" placeholder="salbei, kerze, esstisch" />
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn" data-close-modal="itemModal" type="button">Abbrechen</button>
+        <button id="saveItemBtn" class="btn btn-primary" type="button">Speichern</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================
+       MODAL: LIGHTBOX FÜR BILD-VORSCHAU
+       ====================================================================== -->
+  <div id="lightboxModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="modal-card" style="max-width:780px;">
+      <div class="modal-header">
+        <h2 id="lightboxTitle" class="modal-title">Bildvorschau</h2>
+        <button class="btn-icon" data-close-modal="lightboxModal" type="button">✕</button>
+      </div>
+      <div style="text-align:center; background:var(--card-subtle); border-radius:var(--radius-md); padding:10px; margin-bottom:12px;">
+        <img id="lightboxImg" alt="" style="max-width:100%; max-height:62vh; border-radius:var(--radius-sm); object-fit:contain;" />
+      </div>
+      <p id="lightboxNote" style="font-size:0.9rem; color:var(--text-secondary); margin:0 0 8px;"></p>
+      <div id="lightboxLinkWrap" style="font-size:0.85rem;"></div>
+    </div>
+  </div>
+
+  <!-- ======================================================================
+       MODAL: KONFLIKT BEI BOARD.JSON
+       ====================================================================== -->
+  <div id="conflictModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="conflictTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="conflictTitle" class="modal-title">Änderungskonflikt erkannt</h2>
+      </div>
+      <p style="font-size:0.9rem; color:var(--text-secondary); margin-top:0;">
+        Die Datei <code>board.json</code> dieses Ordners wurde inzwischen auf einem anderen Gerät geändert. Wie möchtest du fortfahren?
+      </p>
+      <div class="modal-footer">
+        <button id="conflictReloadBtn" class="btn" type="button">Version aus Drive laden</button>
+        <button id="conflictOverwriteBtn" class="btn btn-oak" type="button">Meine Version behalten</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      /* ========================================================================
+         1. KONFIGURATION & STATE
+         ======================================================================== */
+      const LS_KEYS = {
+        clientId: 'mb_oauth_client_id',
+        rootName: 'mb_root_folder_name',
+        scope: 'mb_oauth_scope',
+        theme: 'mb_theme_mode',
+        pendingSaves: 'mb_pending_board_saves',
+        demoMode: 'mb_demo_mode',
+        demoData: 'mb_demo_data_v1'
+      };
+
+      const state = {
+        mode: 'unauthenticated', // 'unauthenticated' | 'drive' | 'demo'
+        accessToken: null,
+        tokenExpiresAt: 0,
+        tokenClient: null,
+        rootFolderId: null,
+        folders: [],             // Flache Liste: { id, name, parents: [] }
+        expandedFolders: new Set(),
+        activeFolderId: null,
+        quickView: null,         // null | 'all' | 'shopping' | 'todos'
+        activeView: 'gallery',   // 'gallery' | 'home' | 'canvas' | 'planning'
+        galleryMode: 'grid',     // 'grid' | 'list'
+        searchQuery: '',
+        folderContents: {},      // folderId -> { board, boardFileId, modifiedTime, driveFiles: [] }
+        objectUrls: new Map(),   // driveFileId -> blobObjectUrl
+        dirtyFolders: new Set(),
+        saveTimer: null,
+        editingItem: null,
+        pendingConflict: null
+      };
+
+      /* ========================================================================
+         2. HILFSFUNKTIONEN
+         ======================================================================== */
+      function uid(prefix = 'id') {
+        return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+      }
+
+      function escapeHtml(str) {
+        return String(str || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      function createDefaultBoard(folderName = 'Projekt') {
+        return {
+          version: 1,
+          folderType: 'project',
+          projectHome: {
+            enabled: true,
+            eyebrow: 'Projekt-Konzept',
+            title: folderName,
+            lead: '',
+            swatches: [],
+            zoneRules: [],
+            tips: []
+          },
+          budget: { limit: 0, currency: 'EUR', includeSubfolders: true },
+          items: [],
+          todos: []
+        };
+      }
+
+      function getSettings() {
+        return {
+          clientId: localStorage.getItem(LS_KEYS.clientId) || '',
+          rootName: localStorage.getItem(LS_KEYS.rootName) || 'Moodboards',
+          scope: localStorage.getItem(LS_KEYS.scope) || 'https://www.googleapis.com/auth/drive.file'
+        };
+      }
+
+      function showSyncStatus(text, show = true) {
+        const el = document.getElementById('syncStatusBanner');
+        document.getElementById('syncStatusText').textContent = text;
+        el.classList.toggle('hidden', !show);
+      }
+
+      function revokeAllObjectUrls() {
+        for (const url of state.objectUrls.values()) {
+          URL.revokeObjectURL(url);
+        }
+        state.objectUrls.clear();
+      }
+
+      /* ========================================================================
+         3. DEMO-MODUS ADAPTER (LOKAL OHNE GOOGLE LOGIN TESTBAR)
+         ======================================================================== */
+      const DemoAdapter = {
+        load() {
+          const raw = localStorage.getItem(LS_KEYS.demoData);
+          if (raw) return JSON.parse(raw);
+          const rootId = 'demo-root';
+          const f1 = 'demo-xmas';
+          const f2 = 'demo-table';
+          const initial = {
+            rootFolderId: rootId,
+            folders: [
+              { id: f1, name: 'Weihnachten 2026', parents: [rootId] },
+              { id: f2, name: 'Esstisch & Tafel', parents: [f1] }
+            ],
+            boards: {
+              [f1]: {
+                ...createDefaultBoard('Weihnachten 2026'),
+                items: [
+                  {
+                    id: 'demo-item-1',
+                    type: 'bookmark',
+                    url: 'https://example.com/skandi-kerzen',
+                    previewImageUrl: '',
+                    title: 'Beispiel-Bookmark: Stabkerzen Salbei',
+                    note: 'Demo-Eintrag – füge oben Bilder oder eigene Bookmarks hinzu.',
+                    tags: ['salbei', 'kerze', 'weihnachten']
+                  }
+                ]
+              },
+              [f2]: createDefaultBoard('Esstisch & Tafel')
+            }
+          };
+          localStorage.setItem(LS_KEYS.demoData, JSON.stringify(initial));
+          return initial;
+        },
+        save(data) {
+          localStorage.setItem(LS_KEYS.demoData, JSON.stringify(data));
+        }
+      };
+
+      /* ========================================================================
+         4. GOOGLE OAUTH & DRIVE REST API V3 ADAPTER
+         ======================================================================== */
+      const DriveAdapter = {
+        async apiFetch(url, options = {}) {
+          if (!state.accessToken) {
+            const err = new Error('Kein Access Token');
+            err.status = 401;
+            throw err;
+          }
+          const headers = new Headers(options.headers || {});
+          headers.set('Authorization', `Bearer ${state.accessToken}`);
+          const res = await fetch(url, { ...options, headers });
+          if (res.status === 401) {
+            handleTokenExpired();
+            const err = new Error('Sitzung abgelaufen (401)');
+            err.status = 401;
+            throw err;
+          }
+          if (!res.ok) {
+            const txt = await res.text();
+            const err = new Error(`Drive API Fehler (${res.status}): ${txt}`);
+            err.status = res.status;
+            throw err;
+          }
+          return res;
+        },
+
+        async ensureRootFolder(rootName) {
+          const q = encodeURIComponent(`name='${rootName.replace(/'/g, "\\'")}' and mimeType='application/vnd.google-apps.folder' and trashed=false and 'root' in parents`);
+          const res = await this.apiFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`);
+          const data = await res.json();
+          if (data.files && data.files.length > 0) return data.files[0].id;
+          const created = await this.createFolder('root', rootName);
+          return created.id;
+        },
+
+        async createFolder(parentId, name) {
+          const res = await this.apiFetch('https://www.googleapis.com/drive/v3/files?fields=id,name,parents', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name,
+              mimeType: 'application/vnd.google-apps.folder',
+              parents: [parentId]
+            })
+          });
+          return res.json();
+        },
+
+        async renameFile(fileId, name) {
+          const res = await this.apiFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name })
+          });
+          return res.json();
+        },
+
+        async trashFile(fileId) {
+          await this.apiFetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ trashed: true })
+          });
+        },
+
+        async listAllSubfolders(rootId) {
+          // Lädt rekursiv alle Ordner unterhalb von rootId
+          const all = [];
+          const queue = [rootId];
+          while (queue.length > 0) {
+            const parentId = queue.shift();
+            const q = encodeURIComponent(`'${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+            const res = await this.apiFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&pageSize=100&fields=files(id,name,parents)&orderBy=name`);
+            const data = await res.json();
+            for (const f of (data.files || [])) {
+              all.push(f);
+              queue.push(f.id);
+            }
+          }
+          return all;
+        },
+
+        async listFolderFiles(folderId) {
+          const q = encodeURIComponent(`'${folderId}' in parents and mimeType!='application/vnd.google-apps.folder' and trashed=false`);
+          const res = await this.apiFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&pageSize=200&fields=files(id,name,mimeType,modifiedTime,webViewLink,size)`);
+          const data = await res.json();
+          return data.files || [];
+        },
+
+        async downloadJson(fileId) {
+          const res = await this.apiFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
+          return res.json();
+        },
+
+        async getFileMeta(fileId) {
+          const res = await this.apiFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,modifiedTime`);
+          return res.json();
+        },
+
+        async fetchBlobUrl(fileId) {
+          if (state.objectUrls.has(fileId)) return state.objectUrls.get(fileId);
+          const res = await this.apiFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          state.objectUrls.set(fileId, url);
+          return url;
+        },
+
+        async uploadMultipart(folderId, filename, mimeType, bodyBlob, existingFileId = null) {
+          const metadata = existingFileId ? { name: filename } : { name: filename, parents: [folderId] };
+          const form = new FormData();
+          form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+          form.append('file', bodyBlob);
+
+          const endpoint = existingFileId
+            ? `https://www.googleapis.com/upload/drive/v3/files/${existingFileId}?uploadType=multipart&fields=id,name,modifiedTime,mimeType,webViewLink`
+            : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,modifiedTime,mimeType,webViewLink`;
+
+          const res = await this.apiFetch(endpoint, {
+            method: existingFileId ? 'PATCH' : 'POST',
+            body: form
+          });
+          return res.json();
+        },
+
+        async createGoogleDoc(folderId, title) {
+          const res = await this.apiFetch('https://www.googleapis.com/drive/v3/files?fields=id,name,mimeType,webViewLink,modifiedTime', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: title,
+              mimeType: 'application/vnd.google-apps.document',
+              parents: [folderId]
+            })
+          });
+          return res.json();
+        }
+      };
+
+      /* ========================================================================
+         5. AUTHENTIFIZIERUNG & 401-OFFLINE-PUFFER
+         ======================================================================== */
+      function initAuthClient() {
+        const { clientId, scope } = getSettings();
+        if (!clientId || !window.google || !google.accounts || !google.accounts.oauth2) return false;
+        state.tokenClient = google.accounts.oauth2.initTokenClient({
+          client_id: clientId,
+          scope,
+          callback: async (tokenResponse) => {
+            if (tokenResponse.error) {
+              alert('Google Login fehlgeschlagen: ' + tokenResponse.error);
+              return;
+            }
+            state.accessToken = tokenResponse.access_token;
+            state.tokenExpiresAt = Date.now() + (Number(tokenResponse.expires_in || 3600) * 1000);
+            state.mode = 'drive';
+            localStorage.removeItem(LS_KEYS.demoMode);
+            document.getElementById('tokenExpiredBanner').classList.add('hidden');
+            document.getElementById('demoBanner').classList.add('hidden');
+            updateAuthUI();
+            await flushPendingLocalSaves();
+            await loadDriveWorkspace();
+          }
+        });
+        return true;
+      }
+
+      function requestGoogleSignIn() {
+        const { clientId } = getSettings();
+        if (!clientId) {
+          openModal('settingsModal');
+          return;
+        }
+        if (!state.tokenClient && !initAuthClient()) {
+          alert('Google Identity Services Script wird noch geladen oder ist offline. Bitte kurz warten.');
+          return;
+        }
+        state.tokenClient.requestAccessToken({ prompt: state.accessToken ? '' : 'consent' });
+      }
+
+      function handleTokenExpired() {
+        state.accessToken = null;
+        document.getElementById('tokenExpiredBanner').classList.remove('hidden');
+        updateAuthUI();
+      }
+
+      function bufferBoardLocally(folderId, board) {
+        const pending = JSON.parse(localStorage.getItem(LS_KEYS.pendingSaves) || '{}');
+        pending[folderId] = { savedAt: Date.now(), board };
+        localStorage.setItem(LS_KEYS.pendingSaves, JSON.stringify(pending));
+      }
+
+      async function flushPendingLocalSaves() {
+        const pending = JSON.parse(localStorage.getItem(LS_KEYS.pendingSaves) || '{}');
+        const folderIds = Object.keys(pending);
+        if (folderIds.length === 0) return;
+        showSyncStatus('Speichere gepufferte Änderungen nach Google Drive…', true);
+        for (const fId of folderIds) {
+          try {
+            const files = await DriveAdapter.listFolderFiles(fId);
+            const boardFile = files.find((f) => f.name === 'board.json');
+            const blob = new Blob([JSON.stringify(pending[fId].board, null, 2)], { type: 'application/json' });
+            await DriveAdapter.uploadMultipart(fId, 'board.json', 'application/json', blob, boardFile ? boardFile.id : null);
+            delete pending[fId];
+          } catch (e) {
+            console.warn('Puffer-Sync fehlgeschlagen für', fId, e);
+          }
+        }
+        localStorage.setItem(LS_KEYS.pendingSaves, JSON.stringify(pending));
+        showSyncStatus('', false);
+      }
+
+      function updateAuthUI() {
+        const statusEl = document.getElementById('authStatusText');
+        const btn = document.getElementById('authActionBtn');
+        if (state.mode === 'drive' && state.accessToken) {
+          statusEl.textContent = '✅ Mit Google Drive verbunden';
+          btn.textContent = 'Aktualisieren';
+        } else if (state.mode === 'demo') {
+          statusEl.textContent = '🧪 Demo-Modus (lokal)';
+          btn.textContent = 'Google verbinden';
+        } else {
+          statusEl.textContent = 'Nicht verbunden';
+          btn.textContent = 'Mit Google verbinden';
+        }
+      }
+
+      /* ========================================================================
+         6. WORKSPACE & ORDNER LADEN + SPEICHERN (MIT KONFLIKTSCHUTZ)
+         ======================================================================== */
+      async function loadDriveWorkspace() {
+        showSyncStatus('Lade Ordnerstruktur aus Google Drive…', true);
+        try {
+          const { rootName } = getSettings();
+          state.rootFolderId = await DriveAdapter.ensureRootFolder(rootName);
+          state.folders = await DriveAdapter.listAllSubfolders(state.rootFolderId);
+          state.expandedFolders.add(state.rootFolderId);
+
+          if (!state.activeFolderId || !state.folders.some((f) => f.id === state.activeFolderId)) {
+            state.activeFolderId = state.folders.length > 0 ? state.folders[0].id : null;
+          }
+          renderSidebar();
+          if (state.activeFolderId) {
+            await openFolder(state.activeFolderId);
+          } else {
+            renderMainView();
+          }
+        } catch (err) {
+          console.error(err);
+          alert(err.message);
+        } finally {
+          showSyncStatus('', false);
+        }
+      }
+
+      function startDemoMode() {
+        state.mode = 'demo';
+        localStorage.setItem(LS_KEYS.demoMode, '1');
+        document.getElementById('demoBanner').classList.remove('hidden');
+        document.getElementById('tokenExpiredBanner').classList.add('hidden');
+        const demo = DemoAdapter.load();
+        state.rootFolderId = demo.rootFolderId;
+        state.folders = demo.folders;
+        state.expandedFolders.add(demo.rootFolderId);
+        state.activeFolderId = demo.folders[0]?.id || null;
+        updateAuthUI();
+        renderSidebar();
+        if (state.activeFolderId) openFolder(state.activeFolderId);
+        else renderMainView();
+      }
+
+      async function openFolder(folderId) {
+        state.activeFolderId = folderId;
+        state.quickView = null;
+        revokeAllObjectUrls();
+        renderSidebar();
+
+        if (state.mode === 'demo') {
+          const demo = DemoAdapter.load();
+          const folder = demo.folders.find((f) => f.id === folderId);
+          const board = demo.boards[folderId] || createDefaultBoard(folder?.name || 'Ordner');
+          state.folderContents[folderId] = { board, boardFileId: null, modifiedTime: null, driveFiles: [] };
+          renderMainView();
+          return;
+        }
+
+        showSyncStatus('Lade Ordnerinhalte…', true);
+        try {
+          const files = await DriveAdapter.listFolderFiles(folderId);
+          const boardFile = files.find((f) => f.name === 'board.json');
+          const folder = state.folders.find((f) => f.id === folderId);
+          let board = createDefaultBoard(folder ? folder.name : 'Projekt');
+
+          if (boardFile) {
+            board = await DriveAdapter.downloadJson(boardFile.id);
+          }
+
+          // Externe Dateien (z. B. Bilder, Google Docs, Sheets, PDFs) erkennen
+          const otherFiles = files.filter((f) => f.name !== 'board.json');
+          state.folderContents[folderId] = {
+            board,
+            boardFileId: boardFile ? boardFile.id : null,
+            modifiedTime: boardFile ? boardFile.modifiedTime : null,
+            driveFiles: otherFiles
+          };
+
+          // Falls Bilder per Drive direkt im Ordner liegen und noch nicht in board.items stehen, automatisch ergänzen
+          let addedNew = false;
+          for (const df of otherFiles) {
+            if (df.mimeType.startsWith('image/')) {
+              const exists = board.items.some((it) => it.driveFileId === df.id);
+              if (!exists) {
+                board.items.push({
+                  id: uid('img'),
+                  type: 'image',
+                  driveFileId: df.id,
+                  title: df.name.replace(/\.[^.]+$/, ''),
+                  sourceUrl: '',
+                  note: '',
+                  tags: []
+                });
+                addedNew = true;
+              }
+            }
+          }
+          if (addedNew) scheduleBoardSave(folderId);
+          renderMainView();
+        } catch (err) {
+          console.error(err);
+          if (err.status !== 401) alert(err.message);
+        } finally {
+          showSyncStatus('', false);
+        }
+      }
+
+      function scheduleBoardSave(folderId) {
+        state.dirtyFolders.add(folderId);
+        const content = state.folderContents[folderId];
+        if (!content) return;
+
+        if (state.mode === 'demo') {
+          const demo = DemoAdapter.load();
+          demo.boards[folderId] = content.board;
+          DemoAdapter.save(demo);
+          state.dirtyFolders.delete(folderId);
+          return;
+        }
+
+        clearTimeout(state.saveTimer);
+        state.saveTimer = setTimeout(() => saveBoardNow(folderId), 700);
+      }
+
+      async function saveBoardNow(folderId, forceOverwrite = false) {
+        const content = state.folderContents[folderId];
+        if (!content) return;
+
+        if (!state.accessToken) {
+          bufferBoardLocally(folderId, content.board);
+          handleTokenExpired();
+          return;
+        }
+
+        showSyncStatus('Speichere Änderungen in Google Drive…', true);
+        try {
+          // Konfliktschutz: modifiedTime prüfen bevor wir überschreiben
+          if (content.boardFileId && content.modifiedTime && !forceOverwrite) {
+            const remoteMeta = await DriveAdapter.getFileMeta(content.boardFileId);
+            if (remoteMeta.modifiedTime && remoteMeta.modifiedTime !== content.modifiedTime) {
+              showSyncStatus('', false);
+              state.pendingConflict = folderId;
+              openModal('conflictModal');
+              return;
+            }
+          }
+
+          const blob = new Blob([JSON.stringify(content.board, null, 2)], { type: 'application/json' });
+          const saved = await DriveAdapter.uploadMultipart(folderId, 'board.json', 'application/json', blob, content.boardFileId);
+          content.boardFileId = saved.id;
+          content.modifiedTime = saved.modifiedTime;
+          state.dirtyFolders.delete(folderId);
+        } catch (err) {
+          if (err.status === 401) {
+            bufferBoardLocally(folderId, content.board);
+          } else {
+            alert('Fehler beim Speichern: ' + err.message);
+          }
+        } finally {
+          showSyncStatus('', false);
+        }
+      }
+
+      /* ========================================================================
+         7. SIDEBAR (VERSCHACHTELTER ORDNERBAUM)
+         ======================================================================== */
+      function renderSidebar() {
+        const treeEl = document.getElementById('folderTree');
+        document.querySelectorAll('.nav-item[data-quick]').forEach((btn) => {
+          btn.classList.toggle('active', state.quickView === btn.getAttribute('data-quick'));
+        });
+
+        if (state.mode === 'unauthenticated') {
+          treeEl.innerHTML = '<div style="padding:8px 10px; font-size:0.82rem; color:var(--text-muted);">Verbinde Google Drive oder starte den Demo-Modus.</div>';
+          return;
+        }
+
+        function buildLevel(parentId) {
+          const children = state.folders.filter((f) => (f.parents || []).includes(parentId));
+          if (children.length === 0) return '';
+          return children.map((folder) => {
+            const hasSub = state.folders.some((c) => (c.parents || []).includes(folder.id));
+            const isExpanded = state.expandedFolders.has(folder.id);
+            const isActive = !state.quickView && state.activeFolderId === folder.id;
+            return `
+              <div class="tree-node" data-folder-id="${folder.id}">
+                <div class="tree-row ${isActive ? 'active' : ''}">
+                  <button class="tree-toggle" data-toggle-folder="${folder.id}" type="button">${hasSub ? (isExpanded ? '▾' : '▸') : '•'}</button>
+                  <span class="tree-label" data-select-folder="${folder.id}">📁 ${escapeHtml(folder.name)}</span>
+                  <span class="tree-actions">
+                    <button class="btn-icon" data-add-sub="${folder.id}" type="button" title="Unterordner anlegen">＋</button>
+                    <button class="btn-icon" data-rename-folder="${folder.id}" type="button" title="Umbenennen">✎</button>
+                  </span>
+                </div>
+                ${hasSub && isExpanded ? `<div class="tree-children">${buildLevel(folder.id)}</div>` : ''}
+              </div>
+            `;
+          }).join('');
+        }
+
+        const html = buildLevel(state.rootFolderId);
+        treeEl.innerHTML = html || '<div style="padding:8px 10px; font-size:0.82rem; color:var(--text-muted);">Noch keine Projekte. Klicke oben auf ＋.</div>';
+
+        treeEl.querySelectorAll('[data-toggle-folder]').forEach((btn) => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const id = btn.getAttribute('data-toggle-folder');
+            if (state.expandedFolders.has(id)) state.expandedFolders.delete(id);
+            else state.expandedFolders.add(id);
+            renderSidebar();
+          });
+        });
+
+        treeEl.querySelectorAll('[data-select-folder]').forEach((el) => {
+          el.addEventListener('click', () => {
+            openFolder(el.getAttribute('data-select-folder'));
+            closeMobileSidebar();
+          });
+        });
+
+        treeEl.querySelectorAll('[data-add-sub]').forEach((btn) => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            promptCreateFolder(btn.getAttribute('data-add-sub'));
+          });
+        });
+
+        treeEl.querySelectorAll('[data-rename-folder]').forEach((btn) => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            promptRenameFolder(btn.getAttribute('data-rename-folder'));
+          });
+        });
+      }
+
+      async function promptCreateFolder(parentId) {
+        const name = prompt('Name des neuen Ordners / Projekts:');
+        if (!name || !name.trim()) return;
+        const cleanName = name.trim();
+
+        if (state.mode === 'demo') {
+          const demo = DemoAdapter.load();
+          const newFolder = { id: uid('demo-f'), name: cleanName, parents: [parentId] };
+          demo.folders.push(newFolder);
+          demo.boards[newFolder.id] = createDefaultBoard(cleanName);
+          DemoAdapter.save(demo);
+          state.folders = demo.folders;
+          state.expandedFolders.add(parentId);
+          await openFolder(newFolder.id);
+          return;
+        }
+
+        showSyncStatus('Erstelle Ordner in Google Drive…', true);
+        try {
+          const created = await DriveAdapter.createFolder(parentId, cleanName);
+          state.folders.push(created);
+          state.expandedFolders.add(parentId);
+          await openFolder(created.id);
+        } catch (err) {
+          alert(err.message);
+        } finally {
+          showSyncStatus('', false);
+        }
+      }
+
+      async function promptRenameFolder(folderId) {
+        const folder = state.folders.find((f) => f.id === folderId);
+        if (!folder) return;
+        const nextName = prompt('Neuer Ordnername:', folder.name);
+        if (!nextName || !nextName.trim() || nextName.trim() === folder.name) return;
+
+        if (state.mode === 'demo') {
+          const demo = DemoAdapter.load();
+          const target = demo.folders.find((f) => f.id === folderId);
+          if (target) target.name = nextName.trim();
+          DemoAdapter.save(demo);
+          state.folders = demo.folders;
+          renderSidebar();
+          renderMainView();
+          return;
+        }
+
+        showSyncStatus('Benenne Ordner um…', true);
+        try {
+          await DriveAdapter.renameFile(folderId, nextName.trim());
+          folder.name = nextName.trim();
+          renderSidebar();
+          renderMainView();
+        } catch (err) {
+          alert(err.message);
+        } finally {
+          showSyncStatus('', false);
+        }
+      }
+
+      /* ========================================================================
+         8. HAUPTANSICHT & GALERIE
+         ======================================================================== */
+      function getFolderBreadcrumb(folderId) {
+        const chain = [];
+        let curr = state.folders.find((f) => f.id === folderId);
+        while (curr) {
+          chain.unshift(curr.name);
+          const pid = (curr.parents || [])[0];
+          curr = state.folders.find((f) => f.id === pid);
+        }
+        return ['Moodboards', ...chain].join(' › ');
+      }
+
+      function renderMainView() {
+        const container = document.getElementById('viewContainer');
+        const titleEl = document.getElementById('folderTitle');
+        const breadEl = document.getElementById('breadcrumb');
+        const statsEl = document.getElementById('folderStats');
+
+        document.querySelectorAll('.view-tab').forEach((t) => {
+          t.classList.toggle('active', t.getAttribute('data-view') === state.activeView);
+        });
+
+        if (state.mode === 'unauthenticated') {
+          breadEl.textContent = 'Start';
+          titleEl.textContent = 'Willkommen in deinem Moodboard';
+          statsEl.textContent = '';
+          container.innerHTML = `
+            <div class="empty-state">
+              <h2>Dein visuelles Moodboard auf Google Drive</h2>
+              <p>Verbinde deinen Google-Drive-Ordner über die Einstellungen oder teste die Oberfläche direkt im lokalen Demo-Modus.</p>
+              <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
+                <button id="welcomeConnectBtn" class="btn btn-primary" type="button">Mit Google Drive verbinden</button>
+                <button id="welcomeDemoBtn" class="btn" type="button">Demo-Modus testen</button>
+              </div>
+            </div>
+          `;
+          document.getElementById('welcomeConnectBtn').addEventListener('click', requestGoogleSignIn);
+          document.getElementById('welcomeDemoBtn').addEventListener('click', startDemoMode);
+          return;
+        }
+
+        if (state.quickView === 'all') {
+          breadEl.textContent = 'Schnellsicht';
+          titleEl.textContent = 'Alle geladenen Elemente';
+          renderAllItemsGallery(container, statsEl);
+          return;
+        }
+
+        if (!state.activeFolderId || !state.folderContents[state.activeFolderId]) {
+          breadEl.textContent = 'Moodboards';
+          titleEl.textContent = 'Kein Ordner ausgewählt';
+          statsEl.textContent = '';
+          container.innerHTML = `
+            <div class="empty-state">
+              <h2>Noch kein Projektordner vorhanden</h2>
+              <p>Lege links über „＋“ dein erstes Hauptprojekt an (z. B. <em>Weihnachten 2026</em> oder <em>Wohnzimmer</em>).</p>
+              <button id="emptyCreateBtn" class="btn btn-primary" type="button">＋ Erstes Projekt anlegen</button>
+            </div>
+          `;
+          document.getElementById('emptyCreateBtn').addEventListener('click', () => promptCreateFolder(state.rootFolderId));
+          return;
+        }
+
+        const folder = state.folders.find((f) => f.id === state.activeFolderId);
+        breadEl.textContent = getFolderBreadcrumb(state.activeFolderId);
+        titleEl.textContent = folder ? folder.name : 'Projekt';
+
+        if (state.activeView === 'gallery') {
+          renderGalleryView(container, statsEl, state.activeFolderId);
+        } else {
+          const labels = {
+            home: 'Editierbare Projekt-Startseite (Phase 2)',
+            canvas: 'Freies Moodboard-Canvas (Phase 2)',
+            planning: 'To-dos, Einkaufsliste & Budget-Planung (Phase 3)'
+          };
+          statsEl.textContent = '';
+          container.innerHTML = `
+            <div class="phase-placeholder">
+              <h3 style="margin-top:0; color:var(--text-primary);">${labels[state.activeView]}</h3>
+              <p>Dieser Bereich wird in der nächsten Umsetzungsphase aktiviert. Alle in Phase 1 gesammelten Bilder, Bookmarks und Ordner stehen dort automatisch bereit.</p>
+            </div>
+          `;
+        }
+      }
+
+      function matchesSearch(item) {
+        const q = state.searchQuery.trim().toLowerCase();
+        if (!q) return true;
+        const haystack = [
+          item.title,
+          item.note,
+          item.url,
+          item.sourceUrl,
+          ...(item.tags || [])
+        ].join(' ').toLowerCase();
+        return haystack.includes(q);
+      }
+
+      function renderAllItemsGallery(container, statsEl) {
+        const allItems = [];
+        for (const [fId, data] of Object.entries(state.folderContents)) {
+          const folder = state.folders.find((f) => f.id === fId);
+          for (const item of (data.board.items || [])) {
+            if (matchesSearch(item)) {
+              allItems.push({ item, folderId: fId, folderName: folder ? folder.name : '' });
+            }
+          }
+        }
+        statsEl.textContent = `${allItems.length} Treffer in geladenen Ordnern`;
+        if (allItems.length === 0) {
+          container.innerHTML = '<div class="phase-placeholder">Keine passenden Elemente gefunden. Öffne zuerst deine Projektordner oder passe die Suche an.</div>';
+          return;
+        }
+        container.innerHTML = `<div class="gallery-grid">${allItems.map((e) => renderItemCardHtml(e.item, e.folderName)).join('')}</div>`;
+        bindGalleryItemEvents(container, null);
+      }
+
+      function renderGalleryView(container, statsEl, folderId) {
+        const content = state.folderContents[folderId];
+        const items = (content.board.items || []).filter(matchesSearch);
+        const docs = (content.driveFiles || []).filter((df) => !df.mimeType.startsWith('image/') && (!state.searchQuery.trim() || df.name.toLowerCase().includes(state.searchQuery.trim().toLowerCase())));
+
+        statsEl.textContent = `${items.length} Elemente · ${docs.length} Drive-Dokumente`;
+
+        container.innerHTML = `
+          <div class="gallery-toolbar">
+            <div class="pill-group">
+              <button class="pill-btn ${state.galleryMode === 'grid' ? 'active' : ''}" data-gmode="grid" type="button">Kacheln</button>
+              <button class="pill-btn ${state.galleryMode === 'list' ? 'active' : ''}" data-gmode="list" type="button">Liste</button>
+            </div>
+            <div style="font-size:0.8rem; color:var(--text-muted);">
+              Tipp: Bilder einfach hierher ziehen oder per „＋ Bild“ hochladen.
+            </div>
+          </div>
+
+          <div id="galleryDropzone" class="dropzone">
+            <strong>Bilder hier ablegen</strong> oder klicken zum Hochladen (Laptop &amp; Handy-Kamera)
+          </div>
+
+          <div class="gallery-grid ${state.galleryMode === 'list' ? 'list-mode' : ''}">
+            ${items.map((item) => renderItemCardHtml(item)).join('')}
+            ${docs.map((df) => renderDriveDocCardHtml(df)).join('')}
+          </div>
+        `;
+
+        container.querySelectorAll('[data-gmode]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            state.galleryMode = btn.getAttribute('data-gmode');
+            renderGalleryView(container, statsEl, folderId);
+          });
+        });
+
+        const dz = document.getElementById('galleryDropzone');
+        dz.addEventListener('click', () => document.getElementById('fileUploadInput').click());
+        dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('dragover'); });
+        dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+        dz.addEventListener('drop', (e) => {
+          e.preventDefault();
+          dz.classList.remove('dragover');
+          if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            handleFileUploads(e.dataTransfer.files);
+          }
+        });
+
+        bindGalleryItemEvents(container, folderId);
+      }
+
+      function renderItemCardHtml(item, folderLabel = '') {
+        const badge = item.type === 'image' ? 'Bild' : 'Bookmark';
+        const tagsHtml = (item.tags || []).slice(0, 3).map((t) => `#${escapeHtml(t)}`).join(' ');
+        const thumbSrc = item.type === 'image'
+          ? (item.localDataUrl || '')
+          : (item.previewImageUrl || '');
+
+        return `
+          <article class="item-card" data-item-id="${item.id}">
+            <div class="item-thumb" data-open-item="${item.id}">
+              ${thumbSrc
+                ? `<img src="${escapeHtml(thumbSrc)}" alt="${escapeHtml(item.title)}" data-drive-img="${item.driveFileId || ''}" />`
+                : (item.driveFileId
+                    ? `<img alt="${escapeHtml(item.title)}" data-drive-img="${item.driveFileId}" />`
+                    : `<div class="doc-icon-box"><span>🔗</span><span class="doc-icon-label">Web-Link</span></div>`)
+              }
+              <span class="item-type-badge">${badge}</span>
+            </div>
+            <div class="item-body">
+              <div>
+                <h3 class="item-title">${escapeHtml(item.title || 'Ohne Titel')}</h3>
+                ${item.note ? `<p class="item-note">${escapeHtml(item.note)}</p>` : ''}
+                ${folderLabel ? `<div style="font-size:0.72rem; color:var(--accent-oak); margin-top:2px;">📁 ${escapeHtml(folderLabel)}</div>` : ''}
+              </div>
+              <div class="item-meta">
+                <span>${tagsHtml || (item.url || item.sourceUrl ? 'Link gespeichert' : '')}</span>
+                <div class="item-actions">
+                  ${(item.url || item.sourceUrl) ? `<a class="btn-icon" href="${escapeHtml(item.url || item.sourceUrl)}" target="_blank" rel="noopener" title="Link öffnen">↗</a>` : ''}
+                  <button class="btn-icon" data-edit-item="${item.id}" type="button" title="Bearbeiten">✎</button>
+                  <button class="btn-icon" data-delete-item="${item.id}" type="button" title="Löschen">🗑</button>
+                </div>
+              </div>
+            </div>
+          </article>
+        `;
+      }
+
+      function renderDriveDocCardHtml(df) {
+        let icon = '📄';
+        let label = 'Datei';
+        if (df.mimeType.includes('document')) { icon = '📝'; label = 'Google Doc'; }
+        else if (df.mimeType.includes('spreadsheet')) { icon = '📊'; label = 'Google Sheet'; }
+        else if (df.mimeType.includes('pdf')) { icon = '📕'; label = 'PDF'; }
+
+        return `
+          <article class="item-card">
+            <a class="item-thumb" href="${escapeHtml(df.webViewLink || '#')}" target="_blank" rel="noopener" style="text-decoration:none;">
+              <div class="doc-icon-box">
+                <span>${icon}</span>
+                <span class="doc-icon-label">${label}</span>
+              </div>
+              <span class="item-type-badge">${label}</span>
+            </a>
+            <div class="item-body">
+              <h3 class="item-title">${escapeHtml(df.name)}</h3>
+              <div class="item-meta">
+                <span>Google Drive Datei</span>
+                <a class="btn-icon" href="${escapeHtml(df.webViewLink || '#')}" target="_blank" rel="noopener" title="In Google Drive öffnen">↗</a>
+              </div>
+            </div>
+          </article>
+        `;
+      }
+
+      function bindGalleryItemEvents(container, folderId) {
+        // Drive-Bilder CORS-frei über alt=media -> Blob -> ObjectURL nachladen
+        container.querySelectorAll('img[data-drive-img]').forEach(async (imgEl) => {
+          const fileId = imgEl.getAttribute('data-drive-img');
+          if (!fileId || state.mode !== 'drive') return;
+          try {
+            const url = await DriveAdapter.fetchBlobUrl(fileId);
+            imgEl.src = url;
+          } catch (e) {
+            console.warn('Bild konnte nicht geladen werden:', fileId, e);
+          }
+        });
+
+        container.querySelectorAll('[data-open-item]').forEach((el) => {
+          el.addEventListener('click', () => {
+            const id = el.getAttribute('data-open-item');
+            const item = findItemById(id);
+            if (!item) return;
+            if (item.type === 'bookmark' && item.url) {
+              window.open(item.url, '_blank', 'noopener');
+              return;
+            }
+            openLightbox(item);
+          });
+        });
+
+        container.querySelectorAll('[data-edit-item]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-edit-item');
+            const item = findItemById(id);
+            if (item) openItemModal(item);
+          });
+        });
+
+        container.querySelectorAll('[data-delete-item]').forEach((btn) => {
+          btn.addEventListener('click', () => deleteItemById(btn.getAttribute('data-delete-item'), folderId));
+        });
+      }
+
+      function findItemById(itemId) {
+        for (const data of Object.values(state.folderContents)) {
+          const found = (data.board.items || []).find((i) => i.id === itemId);
+          if (found) return found;
+        }
+        return null;
+      }
+
+      async function deleteItemById(itemId, folderId) {
+        if (!confirm('Dieses Element wirklich entfernen?')) return;
+        const targetFolderId = folderId || state.activeFolderId;
+        const content = state.folderContents[targetFolderId];
+        if (!content) return;
+        const item = content.board.items.find((i) => i.id === itemId);
+        content.board.items = content.board.items.filter((i) => i.id !== itemId);
+        scheduleBoardSave(targetFolderId);
+        if (item && item.driveFileId && state.mode === 'drive') {
+          try { await DriveAdapter.trashFile(item.driveFileId); } catch (e) { console.warn(e); }
+        }
+        renderMainView();
+      }
+
+      /* ========================================================================
+         9. BILDUPLOAD, BOOKMARKS & GOOGLE DOC ERSTELLEN
+         ======================================================================== */
+      async function handleFileUploads(fileList) {
+        if (!state.activeFolderId) {
+          alert('Bitte wähle zuerst einen Projektordner aus.');
+          return;
+        }
+        const folderId = state.activeFolderId;
+        const content = state.folderContents[folderId];
+        const files = Array.from(fileList).filter((f) => f.type.startsWith('image/'));
+        if (files.length === 0) return;
+
+        showSyncStatus(`Lade ${files.length} Bild(er) hoch…`, true);
+        try {
+          for (const file of files) {
+            if (state.mode === 'demo') {
+              const dataUrl = await new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.readAsDataURL(file);
+              });
+              content.board.items.unshift({
+                id: uid('img'),
+                type: 'image',
+                localDataUrl: dataUrl,
+                title: file.name.replace(/\.[^.]+$/, ''),
+                sourceUrl: '',
+                note: '',
+                tags: []
+              });
+            } else {
+              const uploaded = await DriveAdapter.uploadMultipart(folderId, file.name, file.type, file);
+              const objUrl = URL.createObjectURL(file);
+              state.objectUrls.set(uploaded.id, objUrl);
+              content.board.items.unshift({
+                id: uid('img'),
+                type: 'image',
+                driveFileId: uploaded.id,
+                title: file.name.replace(/\.[^.]+$/, ''),
+                sourceUrl: '',
+                note: '',
+                tags: []
+              });
+            }
+          }
+          scheduleBoardSave(folderId);
+          renderMainView();
+        } catch (err) {
+          alert('Upload fehlgeschlagen: ' + err.message);
+        } finally {
+          showSyncStatus('', false);
+        }
+      }
+
+      async function createNewGoogleDoc() {
+        if (!state.activeFolderId) {
+          alert('Bitte wähle zuerst einen Ordner aus.');
+          return;
+        }
+        if (state.mode !== 'drive') {
+          alert('Google Docs können nur erstellt werden, wenn du mit Google Drive verbunden bist.');
+          return;
+        }
+        const title = prompt('Name des neuen Google Docs:', 'Projekt-Notizen');
+        if (!title || !title.trim()) return;
+        showSyncStatus('Erstelle Google Doc…', true);
+        try {
+          const doc = await DriveAdapter.createGoogleDoc(state.activeFolderId, title.trim());
+          state.folderContents[state.activeFolderId].driveFiles.unshift(doc);
+          renderMainView();
+          if (doc.webViewLink) window.open(doc.webViewLink, '_blank', 'noopener');
+        } catch (err) {
+          alert(err.message);
+        } finally {
+          showSyncStatus('', false);
+        }
+      }
+
+      /* ========================================================================
+         10. MODALS (EINSTELLUNGEN, BOOKMARK/ITEM, LIGHTBOX)
+         ======================================================================== */
+      function openModal(id) {
+        document.getElementById(id).classList.remove('hidden');
+      }
+
+      function closeModal(id) {
+        document.getElementById(id).classList.add('hidden');
+      }
+
+      function openItemModal(item = null) {
+        if (!state.activeFolderId && !item) {
+          alert('Bitte wähle zuerst einen Projektordner aus.');
+          return;
+        }
+        state.editingItem = item;
+        const isBookmark = !item || item.type === 'bookmark';
+        document.getElementById('itemModalTitle').textContent = item ? 'Element bearbeiten' : 'Neues Web-Bookmark';
+        document.getElementById('itemTitleInput').value = item ? (item.title || '') : '';
+        document.getElementById('itemUrlInput').value = item ? (item.url || item.sourceUrl || '') : '';
+        document.getElementById('itemPreviewInput').value = item ? (item.previewImageUrl || '') : '';
+        document.getElementById('itemNoteInput').value = item ? (item.note || '') : '';
+        document.getElementById('itemTagsInput').value = item ? (item.tags || []).join(', ') : '';
+        document.getElementById('itemPreviewGroup').style.display = isBookmark ? 'block' : 'none';
+        openModal('itemModal');
+      }
+
+      async function openLightbox(item) {
+        document.getElementById('lightboxTitle').textContent = item.title || 'Bildvorschau';
+        document.getElementById('lightboxNote').textContent = item.note || '';
+        const linkWrap = document.getElementById('lightboxLinkWrap');
+        const url = item.sourceUrl || item.url;
+        linkWrap.innerHTML = url ? `Quelle: <a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a>` : '';
+        const img = document.getElementById('lightboxImg');
+        if (item.localDataUrl) {
+          img.src = item.localDataUrl;
+        } else if (item.driveFileId && state.mode === 'drive') {
+          img.src = await DriveAdapter.fetchBlobUrl(item.driveFileId);
+        } else {
+          img.src = item.previewImageUrl || '';
+        }
+        openModal('lightboxModal');
+      }
+
+      /* ========================================================================
+         11. THEME & MOBILE SIDEBAR
+         ======================================================================== */
+      function applyTheme(mode) {
+        const isEvening = mode === 'evening';
+        document.body.classList.toggle('evening-mode', isEvening);
+        document.getElementById('themeToggleBtn').textContent = isEvening ? '🌙 Abend' : '☀️ Tag';
+        localStorage.setItem(LS_KEYS.theme, mode);
+      }
+
+      function closeMobileSidebar() {
+        document.getElementById('sidebar').classList.remove('open');
+        document.getElementById('sidebarOverlay').classList.remove('open');
+      }
+
+      /* ========================================================================
+         12. EVENT-BINDINGS & INITIALISIERUNG
+         ======================================================================== */
+      document.querySelectorAll('[data-close-modal]').forEach((btn) => {
+        btn.addEventListener('click', () => closeModal(btn.getAttribute('data-close-modal')));
+      });
+
+      document.getElementById('openSidebarBtn').addEventListener('click', () => {
+        document.getElementById('sidebar').classList.add('open');
+        document.getElementById('sidebarOverlay').classList.add('open');
+      });
+      document.getElementById('closeSidebarBtn').addEventListener('click', closeMobileSidebar);
+      document.getElementById('sidebarOverlay').addEventListener('click', closeMobileSidebar);
+
+      document.getElementById('themeToggleBtn').addEventListener('click', () => {
+        const next = document.body.classList.contains('evening-mode') ? 'day' : 'evening';
+        applyTheme(next);
+      });
+
+      document.getElementById('openSettingsBtn').addEventListener('click', () => {
+        const s = getSettings();
+        document.getElementById('clientIdInput').value = s.clientId;
+        document.getElementById('rootFolderInput').value = s.rootName;
+        document.getElementById('scopeSelect').value = s.scope;
+        openModal('settingsModal');
+      });
+
+      document.getElementById('saveSettingsBtn').addEventListener('click', () => {
+        localStorage.setItem(LS_KEYS.clientId, document.getElementById('clientIdInput').value.trim());
+        localStorage.setItem(LS_KEYS.rootName, document.getElementById('rootFolderInput').value.trim() || 'Moodboards');
+        localStorage.setItem(LS_KEYS.scope, document.getElementById('scopeSelect').value);
+        state.tokenClient = null;
+        closeModal('settingsModal');
+        initAuthClient();
+      });
+
+      document.getElementById('authActionBtn').addEventListener('click', () => {
+        if (state.mode === 'drive' && state.accessToken) loadDriveWorkspace();
+        else requestGoogleSignIn();
+      });
+      document.getElementById('renewSessionBtn').addEventListener('click', requestGoogleSignIn);
+      document.getElementById('exitDemoBtn').addEventListener('click', requestGoogleSignIn);
+
+      document.getElementById('newRootFolderBtn').addEventListener('click', () => {
+        if (state.mode === 'unauthenticated') {
+          alert('Bitte verbinde dich zuerst mit Google Drive oder starte den Demo-Modus.');
+          return;
+        }
+        promptCreateFolder(state.rootFolderId);
+      });
+
+      document.getElementById('addImageBtn').addEventListener('click', () => {
+        if (!state.activeFolderId) { alert('Bitte wähle zuerst einen Ordner aus.'); return; }
+        document.getElementById('fileUploadInput').click();
+      });
+
+      document.getElementById('fileUploadInput').addEventListener('change', (e) => {
+        if (e.target.files.length > 0) handleFileUploads(e.target.files);
+        e.target.value = '';
+      });
+
+      document.getElementById('addBookmarkBtn').addEventListener('click', () => openItemModal(null));
+      document.getElementById('addDocBtn').addEventListener('click', createNewGoogleDoc);
+
+      document.getElementById('saveItemBtn').addEventListener('click', () => {
+        const title = document.getElementById('itemTitleInput').value.trim();
+        const url = document.getElementById('itemUrlInput').value.trim();
+        const previewImageUrl = document.getElementById('itemPreviewInput').value.trim();
+        const note = document.getElementById('itemNoteInput').value.trim();
+        const tags = document.getElementById('itemTagsInput').value.split(',').map((t) => t.trim()).filter(Boolean);
+
+        if (state.editingItem) {
+          state.editingItem.title = title || 'Ohne Titel';
+          if (state.editingItem.type === 'image') state.editingItem.sourceUrl = url;
+          else {
+            state.editingItem.url = url;
+            state.editingItem.previewImageUrl = previewImageUrl;
+          }
+          state.editingItem.note = note;
+          state.editingItem.tags = tags;
+          scheduleBoardSave(state.activeFolderId);
+        } else {
+          if (!url) { alert('Bitte gib eine URL ein.'); return; }
+          const content = state.folderContents[state.activeFolderId];
+          content.board.items.unshift({
+            id: uid('bm'),
+            type: 'bookmark',
+            url,
+            previewImageUrl,
+            title: title || url,
+            note,
+            tags
+          });
+          scheduleBoardSave(state.activeFolderId);
+        }
+        closeModal('itemModal');
+        renderMainView();
+      });
+
+      document.getElementById('conflictReloadBtn').addEventListener('click', async () => {
+        const fId = state.pendingConflict;
+        state.pendingConflict = null;
+        closeModal('conflictModal');
+        if (fId) await openFolder(fId);
+      });
+
+      document.getElementById('conflictOverwriteBtn').addEventListener('click', async () => {
+        const fId = state.pendingConflict;
+        state.pendingConflict = null;
+        closeModal('conflictModal');
+        if (fId) await saveBoardNow(fId, true);
+      });
+
+      document.querySelectorAll('.view-tab').forEach((tab) => {
+        tab.addEventListener('click', () => {
+          state.activeView = tab.getAttribute('data-view');
+          state.quickView = null;
+          renderMainView();
+        });
+      });
+
+      document.querySelectorAll('.nav-item[data-quick]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const q = btn.getAttribute('data-quick');
+          if (q === 'all') {
+            state.quickView = 'all';
+            renderSidebar();
+            renderMainView();
+            closeMobileSidebar();
+          } else {
+            state.quickView = null;
+            state.activeView = 'planning';
+            renderSidebar();
+            renderMainView();
+            closeMobileSidebar();
+          }
+        });
+      });
+
+      document.getElementById('searchInput').addEventListener('input', (e) => {
+        state.searchQuery = e.target.value;
+        renderMainView();
+      });
+
+      // Init
+      applyTheme(localStorage.getItem(LS_KEYS.theme) || 'day');
+      if (localStorage.getItem(LS_KEYS.demoMode) === '1') {
+        startDemoMode();
+      } else {
+        updateAuthUI();
+        renderSidebar();
+        renderMainView();
+      }
+      window.addEventListener('load', () => { initAuthClient(); });
+    })();
+  </script>
+</body>
+</html>
