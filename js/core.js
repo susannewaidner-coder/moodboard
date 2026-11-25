@@ -4,7 +4,7 @@
       /* ========================================================================
          1. KONFIGURATION & STATE
          ======================================================================== */
-      const APP_VERSION = 'v1.0.4';
+      const APP_VERSION = 'v1.0.5';
       const LS_KEYS = {
         clientId: 'mb_oauth_client_id',
         rootName: 'mb_root_folder_name',
@@ -472,14 +472,14 @@
         const statusEl = document.getElementById('authStatusText');
         const btn = document.getElementById('authActionBtn');
         if (state.mode === 'drive' && state.accessToken) {
-          statusEl.textContent = '✅ Mit Google Drive verbunden';
+          statusEl.innerHTML = '<span style="color:var(--accent-sage-dark);">●</span> Drive verbunden';
           btn.textContent = 'Aktualisieren';
         } else if (state.mode === 'demo') {
-          statusEl.textContent = '🧪 Demo-Modus (lokal)';
-          btn.textContent = 'Google verbinden';
+          statusEl.innerHTML = '<span style="color:var(--accent-oak);">●</span> Demo-Modus';
+          btn.textContent = 'Verbinden';
         } else {
-          statusEl.textContent = 'Nicht verbunden';
-          btn.textContent = 'Mit Google verbinden';
+          statusEl.innerHTML = '<span style="color:var(--text-muted);">●</span> Getrennt';
+          btn.textContent = 'Verbinden';
         }
       }
 
