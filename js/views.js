@@ -31,7 +31,7 @@
               <div class="tree-node" data-folder-id="${folder.id}">
                 <div class="tree-row ${isActive ? 'active' : ''}">
                   <button class="tree-toggle ${hasSub ? '' : 'empty'}" data-toggle-folder="${folder.id}" type="button" title="${hasSub ? (isExpanded ? 'Zuklappen' : 'Ausklappen') : ''}">${hasSub ? (isExpanded ? '▼' : '▶') : ''}</button>
-                  <span class="tree-label" data-select-folder="${folder.id}">${icon} ${escapeHtml(folder.name)}</span>
+                  <span class="tree-label" data-select-folder="${folder.id}">${getFolderIcon(folder.id)} ${escapeHtml(folder.name)}</span>
                   <span class="tree-actions">
                     <button class="btn-icon" data-folder-menu="${folder.id}" type="button" title="Ordner-Aktionen">⋯</button>
                   </span>
@@ -94,6 +94,7 @@
             const isInvRoot = fId === state.inventoryRootId;
             menu.innerHTML = `
               <button class="tree-menu-item" data-menu-action="sub" type="button">＋ Unterordner anlegen</button>
+              ${!isInvRoot ? '<button class="tree-menu-item" data-menu-action="icon" type="button">🎨 Icon wählen</button>' : ''}
               ${!isInvRoot ? '<button class="tree-menu-item" data-menu-action="rename" type="button">✎ Umbenennen</button>' : ''}
               ${!isInvRoot ? '<button class="tree-menu-item" data-menu-action="move" type="button">↗️ Verschieben</button>' : ''}
               ${!isInvRoot ? '<button class="tree-menu-item" data-menu-action="delete" type="button" style="color:var(--danger);">🗑 Löschen</button>' : ''}
@@ -102,6 +103,11 @@
             menu.querySelector('[data-menu-action="sub"]').addEventListener('click', () => {
               closeFolderMenu();
               promptCreateFolder(fId);
+            });
+            const iconBtn = menu.querySelector('[data-menu-action="icon"]');
+            if (iconBtn) iconBtn.addEventListener('click', () => {
+              closeFolderMenu();
+              promptFolderIcon(fId);
             });
             const renBtn = menu.querySelector('[data-menu-action="rename"]');
             if (renBtn) renBtn.addEventListener('click', () => {
@@ -207,6 +213,43 @@
         if (cb && val) await cb(val);
       });
 
+      const FOLDER_ICON_PRESETS = ['🎄', '🕯️', '🎁', '⭐', '❄️', '🌿', '🌸', '🌷', '☀️', '🍂', '🎃', '🐣', '🏡', '🛋️', '🍽️', '🪑', '🛏️', '🪴', '🎨', '✂️', '🧶', '📦', '📁', '✨', '💡', '🛒', '❤️', '🎉'];
+      let pendingIconFolderId = null;
+
+      async function applyFolderIcon(folderId, icon) {
+        if (!folderId) return;
+        if (icon) state.folderIcons[folderId] = icon;
+        else delete state.folderIcons[folderId];
+        closeModal('folderIconModal');
+        renderSidebar();
+        await saveFolderIcons();
+      }
+
+      function promptFolderIcon(folderId) {
+        const folder = state.folders.find((f) => f.id === folderId);
+        if (!folder) return;
+        pendingIconFolderId = folderId;
+        document.getElementById('folderIconTitle').textContent = `🎨 Icon für „${folder.name}“`;
+        const cur = state.folderIcons[folderId] || '';
+        document.getElementById('customFolderIconInput').value = cur;
+        const grid = document.getElementById('folderIconGrid');
+        grid.innerHTML = FOLDER_ICON_PRESETS.map((em) => `
+          <button type="button" class="btn btn-sm ${cur === em ? 'btn-primary' : ''}" data-pick-ficon="${em}" style="font-size:1.3rem; padding:8px 0; justify-content:center;">${em}</button>
+        `).join('');
+        grid.querySelectorAll('[data-pick-ficon]').forEach((btn) => {
+          btn.addEventListener('click', () => applyFolderIcon(pendingIconFolderId, btn.getAttribute('data-pick-ficon')));
+        });
+        openModal('folderIconModal');
+      }
+
+      document.getElementById('saveCustomFolderIconBtn').addEventListener('click', () => {
+        const val = document.getElementById('customFolderIconInput').value.trim();
+        if (val) applyFolderIcon(pendingIconFolderId, val);
+      });
+      document.getElementById('resetFolderIconBtn').addEventListener('click', () => {
+        applyFolderIcon(pendingIconFolderId, '');
+      });
+
       function buildFolderOptionList(excludeSubtreeIds = new Set(), includeRoot = true, excludeSelfIds = new Set()) {
         const opts = [];
         if (includeRoot && state.rootFolderId && !excludeSubtreeIds.has(state.rootFolderId) && !excludeSelfIds.has(state.rootFolderId)) {
@@ -215,7 +258,7 @@
         function walk(parentId, prefix = '') {
           const children = state.folders.filter((f) => (f.parents || []).includes(parentId) && !excludeSubtreeIds.has(f.id));
           for (const ch of children) {
-            const icon = isInventoryFolder(ch.id) ? '📦' : '📁';
+            const icon = getFolderIcon(ch.id);
             const labelName = ch.name === '_Inventory' ? 'Inventory' : ch.name;
             if (!excludeSelfIds.has(ch.id)) {
               opts.push({ value: ch.id, label: `${prefix}${icon} ${labelName}` });
