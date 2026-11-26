@@ -453,7 +453,7 @@
 
       function renderItemCardHtml(item, folderLabel = '') {
         const badge = item.type === 'image' ? 'Bild' : 'Bookmark';
-        const tagsHtml = (item.tags || []).map((t) => `<span style="display:inline-block; padding:1px 6px; border-radius:999px; background:var(--card-subtle); border:1px solid var(--border-color); font-size:0.7rem;">#${escapeHtml(t)}</span>`).join(' ');
+        const tagsHtml = (item.tags || []).map((t) => `<span class="item-tag-pill">#${escapeHtml(t)}</span>`).join('');
         const thumbSrc = item.type === 'image'
           ? (item.localDataUrl || '')
           : (item.previewImageUrl || '');
@@ -465,6 +465,7 @@
         const badgeText = priceVal > 0
           ? `${shopLabels[shopStatus] || '💡 Idee'} · ${priceVal.toFixed(2)} €`
           : (shopLabels[shopStatus] || '💡 Idee');
+        const linkUrl = item.url || item.sourceUrl || '';
 
         return `
           <article class="item-card ${shopCardClass}" data-item-id="${item.id}">
@@ -479,19 +480,18 @@
               <span class="price-badge status-${shopStatus}">${badgeText}</span>
             </div>
             <div class="item-body">
-              <div>
+              <div style="min-width:0; flex:1;">
                 <h3 class="item-title">${escapeHtml(item.title || 'Ohne Titel')}</h3>
                 ${item.note ? `<p class="item-note">${escapeHtml(item.note)}</p>` : ''}
-                ${folderLabel ? `<div style="font-size:0.72rem; color:var(--accent-oak); margin-top:2px;">📁 ${escapeHtml(folderLabel)}</div>` : ''}
+                ${folderLabel ? `<div style="font-size:0.72rem; color:var(--accent-oak); margin-top:3px;">📁 ${escapeHtml(folderLabel)}</div>` : ''}
+                ${tagsHtml ? `<div class="item-tags">${tagsHtml}</div>` : ''}
               </div>
               <div class="item-meta">
-                <span>${tagsHtml || (item.url || item.sourceUrl ? 'Link gespeichert' : '')}</span>
+                <span>${linkUrl ? `<a href="${escapeHtml(linkUrl)}" target="_blank" rel="noopener" style="font-size:0.75rem;">↗ Quelle</a>` : ''}</span>
                 <div class="item-actions">
-                  <button class="btn-icon" data-toggle-canvas="${item.id}" type="button" title="${item.canvasHidden ? 'Auf Moodboard anzeigen' : 'Vom Moodboard ausblenden'}" style="${item.canvasHidden ? 'opacity:0.4;' : ''}">🎨</button>
                   <button class="btn-icon" data-toggle-shop="${item.id}" type="button" title="Auf Einkaufsliste setzen/entfernen" style="${shop ? 'color:var(--accent-fir); font-weight:700;' : ''}">🛒</button>
-                  ${(item.url || item.sourceUrl) ? `<a class="btn-icon" href="${escapeHtml(item.url || item.sourceUrl)}" target="_blank" rel="noopener" title="Link öffnen">↗</a>` : ''}
                   <button class="btn-icon" data-edit-item="${item.id}" type="button" title="Bearbeiten">✎</button>
-                  <button class="btn-icon" data-delete-item="${item.id}" type="button" title="Löschen">🗑</button>
+                  <button class="btn-icon" data-item-menu="${item.id}" type="button" title="Weitere Aktionen">⋯</button>
                 </div>
               </div>
             </div>
@@ -560,17 +560,49 @@
           });
         });
 
-        container.querySelectorAll('[data-delete-item]').forEach((btn) => {
-          btn.addEventListener('click', () => deleteItemById(btn.getAttribute('data-delete-item'), folderId));
-        });
-
-        container.querySelectorAll('[data-toggle-canvas]').forEach((btn) => {
-          btn.addEventListener('click', () => {
-            const found = findItemWithFolder(btn.getAttribute('data-toggle-canvas'));
+        container.querySelectorAll('[data-item-menu]').forEach((btn) => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const id = btn.getAttribute('data-item-menu');
+            const found = findItemWithFolder(id);
             if (!found) return;
-            found.item.canvasHidden = !found.item.canvasHidden;
-            scheduleBoardSave(found.fId);
-            renderMainView();
+            const { item, fId } = found;
+
+            const old = document.getElementById('itemMenuPopover');
+            if (old) {
+              const same = old.getAttribute('data-for') === id;
+              old.remove();
+              if (same) return;
+            }
+
+            const rect = btn.getBoundingClientRect();
+            const menu = document.createElement('div');
+            menu.id = 'itemMenuPopover';
+            menu.setAttribute('data-for', id);
+            menu.className = 'tree-menu-popover';
+            menu.style.top = `${Math.min(window.innerHeight - 130, rect.bottom + 4)}px`;
+            menu.style.left = `${Math.max(10, Math.min(window.innerWidth - 195, rect.right - 180))}px`;
+            menu.innerHTML = `
+              <button class="tree-menu-item" data-im-action="canvas" type="button">
+                ${item.canvasHidden ? '🎨 Auf Moodboard zeigen' : '🎨 Vom Moodboard ausblenden'}
+              </button>
+              <button class="tree-menu-item" data-im-action="delete" type="button" style="color:var(--danger);">
+                🗑 Löschen
+              </button>
+            `;
+            menu.addEventListener('click', (ev) => ev.stopPropagation());
+            menu.querySelector('[data-im-action="canvas"]').addEventListener('click', () => {
+              menu.remove();
+              item.canvasHidden = !item.canvasHidden;
+              scheduleBoardSave(fId);
+              renderMainView();
+            });
+            menu.querySelector('[data-im-action="delete"]').addEventListener('click', () => {
+              menu.remove();
+              deleteItemById(id, folderId || fId);
+            });
+            document.body.appendChild(menu);
+            document.addEventListener('click', () => menu.remove(), { once: true });
           });
         });
 
