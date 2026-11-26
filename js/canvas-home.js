@@ -98,6 +98,7 @@
         const bgMode = cs.bgMode || state.canvasBg;
         const bgColor = cs.bgColor || '';
         const collageMode = !!cs.collageMode;
+        const snapToGrid = !!cs.snapToGrid;
         const showGrid = collageMode ? false : (cs.showGrid !== undefined ? cs.showGrid : state.canvasShowGrid);
 
         const allBoxes = [
@@ -166,9 +167,10 @@
                         <input id="canvasBgColorHex" class="form-control hex-input" type="text" maxlength="7" value="${escapeHtml((bgColor || '#F8F7F4').toUpperCase())}" placeholder="#F8F7F4" />
                       </div>
                     </div>
-                    <div style="display:flex; gap:6px;">
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
                       <button id="canvasGridBtn" class="btn btn-sm ${showGrid ? '' : 'btn-oak'}" type="button" style="flex:1;">${showGrid ? 'Raster: An' : 'Raster: Aus'}</button>
-                      <button id="canvasResetViewBtn" class="btn btn-sm" type="button" style="flex:1;">100 %</button>
+                      <button id="canvasSnapBtn" class="btn btn-sm ${snapToGrid ? 'btn-oak' : ''}" type="button" style="flex:1;" title="Beim Verschieben und Skalieren am 12px-Raster einrasten">${snapToGrid ? '🧲 Snap: An' : '🧲 Snap: Aus'}</button>
+                      <button id="canvasResetViewBtn" class="btn btn-sm" type="button" style="flex:1;" title="Zoom auf 100 % zurücksetzen und nach oben links scrollen">🔍 100 %</button>
                     </div>
                   </div>
                 </div>
@@ -188,21 +190,25 @@
             </div>
           </div>
 
-          ${selectedList.length > 0 ? `
-            <div id="canvasSelectionBar" class="canvas-selection-bar">
+          <div id="canvasSelectionBar" class="canvas-selection-bar">
+            ${selectedList.length > 0 ? `
               <strong>${selectedList.length} ausgewählt:</strong>
               ${firstSel && firstSel.kind === 'item' ? (() => {
                 const fc = firstSel.box;
                 const fCol = fc.frameColor || (fc.frame === 'white' ? '#FFFFFF' : '');
+                const fWidth = Math.max(1, Number(fc.frameWidth) || 6);
+                const hasShadow = fc.shadow !== false;
                 return `
                   <button class="btn btn-sm" data-sel-shape="rect" type="button">▭ Rechteck</button>
                   <button class="btn btn-sm" data-sel-shape="rounded" type="button">▢ Rund</button>
                   <button class="btn btn-sm" data-sel-shape="circle" type="button">◯ Kreis</button>
                   <button class="btn btn-sm ${fCol ? 'btn-oak' : ''}" id="selFrameToggleBtn" type="button">⬜ Rand</button>
-                  <div class="hex-color-pair" title="Randfarbe">
+                  <div class="hex-color-pair" title="Randfarbe &amp; Breite">
                     <input id="selFrameColorInput" type="color" value="${escapeHtml(fCol || '#FFFFFF')}" />
                     <input id="selFrameColorHex" class="form-control hex-input" type="text" maxlength="7" value="${escapeHtml((fCol || '#FFFFFF').toUpperCase())}" placeholder="#FFFFFF" />
+                    <input id="selFrameWidthInput" class="form-control" type="number" min="1" max="24" value="${fWidth}" title="Randbreite (px)" style="width:48px; padding:4px 5px; font-size:0.78rem;" />
                   </div>
+                  <button class="btn btn-sm ${hasShadow ? 'btn-oak' : ''}" id="selShadowToggleBtn" type="button" title="Schatten ein-/ausschalten">🌑 Schatten</button>
                   <button class="btn btn-sm" id="selOrigRatioBtn" type="button" title="Passt Höhe exakt an das Bildformat an (kein Rand, kein Beschnitt)">📐 Original-Format</button>
                   <span style="display:inline-flex; align-items:center; gap:4px; margin-left:4px;" title="Bildausschnitt verschieben &amp; zoomen">
                     <span>🔍</span>
@@ -210,6 +216,7 @@
                     <input id="selCropY" type="range" min="0" max="100" value="${fc.cropY ?? 50}" style="width:48px;" title="Ausschnitt Oben/Unten" />
                     <input id="selCropZoom" type="range" min="1" max="2.5" step="0.05" value="${fc.cropZoom || 1}" style="width:52px;" title="Ausschnitt Zoom" />
                   </span>
+                  <button class="btn btn-sm" id="selResetBtn" type="button" title="Form, Rand, Schatten, Ausschnitt &amp; Format zurücksetzen">↺ Zurücksetzen</button>
                 `;
               })() : ''}
               ${firstSel && firstSel.kind === 'el' ? `
@@ -218,8 +225,8 @@
               <button class="btn btn-sm" id="canvasLayerUpBtn" type="button">⬆️ Vorne</button>
               <button class="btn btn-sm" id="canvasLayerDownBtn" type="button">⬇️ Hinten</button>
               <button class="btn btn-sm" id="selRemoveCanvasBtn" type="button" style="color:var(--danger);">🗑 Vom Board entfernen</button>
-            </div>
-          ` : ''}
+            ` : `<span style="color:var(--text-muted);">Klicke auf ein Element für Form, Rand, Schatten, Ausschnitt &amp; Ebenen…</span>`}
+          </div>
 
           <div class="canvas-split-layout ${state.canvasSplitOpen ? 'with-split' : ''}">
             <div id="canvasViewport" class="canvas-viewport ${showGrid ? '' : 'no-grid'} ${collageMode ? 'collage-mode' : ''} ${!bgColor && bgMode === 'white' ? 'bg-white' : (!bgColor && bgMode === 'dark' ? 'bg-dark' : '')}" style="${bgColor ? `background-color:${escapeHtml(bgColor)};` : ''}">
@@ -235,7 +242,9 @@
                   try { if (linkUrl) domain = new URL(linkUrl).hostname.replace(/^www\./, ''); } catch (e) {}
                   const shapeCls = c.shape === 'circle' ? 'shape-circle' : (c.shape === 'rounded' ? 'shape-rounded' : '');
                   const fCol = c.frameColor || (c.frame === 'white' ? '#FFFFFF' : '');
-                  const frameStyle = fCol ? `border:6px solid ${escapeHtml(fCol)}; box-shadow:var(--shadow-md);` : '';
+                  const fWidth = Math.max(1, Number(c.frameWidth) || 6);
+                  const frameStyle = fCol ? `border:${fWidth}px solid ${escapeHtml(fCol)};` : '';
+                  const shadowStyle = c.shadow === false ? 'box-shadow:none;' : (fCol ? 'box-shadow:var(--shadow-md);' : '');
                   const itemFit = c.fitMode || fitMode;
                   const cx = c.cropX ?? 50;
                   const cy = c.cropY ?? 50;
@@ -245,7 +254,7 @@
                     <div class="canvas-item ${isSelected ? 'selected' : ''} ${itemFit === 'contain' ? 'fit-contain' : ''} ${shapeCls}"
                          data-canvas-id="${rawItem.id}"
                          data-canvas-kind="item"
-                         style="left:${c.x}px; top:${c.y}px; width:${c.w}px; height:${c.h}px; z-index:${c.z || 1}; ${frameStyle}">
+                         style="left:${c.x}px; top:${c.y}px; width:${c.w}px; height:${c.h}px; z-index:${c.z || 1}; ${frameStyle} ${shadowStyle}">
                       ${hasVisual
                         ? `<img src="${escapeHtml(src)}" alt="${escapeHtml(item.title)}" data-drive-img="${item.driveFileId || ''}" style="${imgStyle}" />`
                         : `<div style="width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:12px; text-align:center; gap:6px; background:var(--card-bg);">
@@ -265,12 +274,13 @@
                   const isSelected = state.selectedCanvasIds.has(el.id);
                   if (el.type === 'palette') {
                     const colors = Array.isArray(el.colors) ? el.colors : ['#4A5D3B', '#A8A84D', '#5D8798', '#8BB5BF', '#EAEAEA'];
+                    const isVert = el.orientation === 'vertical';
                     return `
                       <div class="canvas-item ${isSelected ? 'selected' : ''}"
                            data-canvas-id="${el.id}"
                            data-canvas-kind="el"
                            style="left:${el.x}px; top:${el.y}px; width:${el.w}px; height:${el.h}px; z-index:${el.z || 10}; box-shadow:none;">
-                        <div class="canvas-el-palette ${el.shape === 'circle' ? 'circle' : ''}">
+                        <div class="canvas-el-palette ${el.shape === 'circle' ? 'circle' : ''} ${isVert ? 'vertical' : ''}">
                           ${colors.map((hex) => `<div class="canvas-el-swatch" style="background:${escapeHtml(hex)};"></div>`).join('')}
                         </div>
                         ${state.canvasLocked ? '' : '<div class="canvas-resize-handle" data-resize-handle="1"></div>'}
@@ -278,18 +288,21 @@
                     `;
                   }
                   const shapeCls = el.shape === 'circle' ? 'shape-circle' : (el.shape === 'pill' ? 'shape-rounded' : '');
-                  const frameCls = el.frame ? 'frame-white' : '';
+                  const fCol = el.frame ? (el.frameColor || '#FFFFFF') : '';
+                  const frameStyle = fCol ? `border:6px solid ${escapeHtml(fCol)}; box-shadow:var(--shadow-md);` : '';
                   const bgStyle = el.shape === 'none' ? 'transparent' : (el.bgColor || '#262927');
                   const fontFam = el.fontStyle === 'serif' ? 'Georgia, serif' : 'inherit';
+                  const align = el.textAlign || 'center';
+                  const justify = align === 'left' ? 'flex-start' : (align === 'right' ? 'flex-end' : 'center');
                   const outlineCss = el.fontStyle === 'outline'
                     ? `color:transparent; -webkit-text-stroke: 1.5px ${escapeHtml(el.color || '#A59858')};`
                     : `color:${escapeHtml(el.color || '#262927')};`;
                   return `
-                    <div class="canvas-item ${isSelected ? 'selected' : ''} ${shapeCls} ${frameCls}"
+                    <div class="canvas-item ${isSelected ? 'selected' : ''} ${shapeCls}"
                          data-canvas-id="${el.id}"
                          data-canvas-kind="el"
-                         style="left:${el.x}px; top:${el.y}px; width:${el.w}px; height:${el.h}px; z-index:${el.z || 10}; background-color:${escapeHtml(bgStyle)}; ${el.shape === 'none' ? 'box-shadow:none;' : ''}">
-                      <div class="canvas-el-text" style="font-size:${Number(el.fontSize) || 24}px; font-family:${fontFam}; font-weight:${el.fontStyle === 'outline' ? '800' : '500'}; ${outlineCss}">${escapeHtml(el.text || 'Text').replace(/\n/g, '<br>')}</div>
+                         style="left:${el.x}px; top:${el.y}px; width:${el.w}px; height:${el.h}px; z-index:${el.z || 10}; background-color:${escapeHtml(bgStyle)}; ${frameStyle} ${el.shape === 'none' ? 'box-shadow:none;' : ''}">
+                      <div class="canvas-el-text" style="font-size:${Number(el.fontSize) || 24}px; font-family:${fontFam}; text-align:${align}; justify-content:${justify}; font-weight:${el.fontStyle === 'outline' ? '800' : '500'}; ${outlineCss}">${escapeHtml(el.text || 'Text').replace(/\n/g, '<br>')}</div>
                       ${state.canvasLocked ? '' : '<div class="canvas-resize-handle" data-resize-handle="1"></div>'}
                     </div>
                   `;
@@ -529,12 +542,60 @@
               if (!state.selectedCanvasIds.has(it.id)) return;
               it.canvas.frameColor = col;
               delete it.canvas.frame;
+              const fw = Math.max(1, Number(it.canvas.frameWidth) || 6);
               const el = stage.querySelector(`.canvas-item[data-canvas-id="${it.id}"]`);
-              if (el) { el.style.border = `6px solid ${col}`; el.style.boxShadow = 'var(--shadow-md)'; }
+              if (el) el.style.border = `${fw}px solid ${col}`;
             });
             scheduleBoardSave(folderId);
           }
         );
+
+        const selFrameWidthInp = document.getElementById('selFrameWidthInput');
+        if (selFrameWidthInp) {
+          selFrameWidthInp.addEventListener('input', () => {
+            const fw = Math.max(1, Math.min(24, Number(selFrameWidthInp.value) || 6));
+            visualItems.forEach((it) => {
+              if (!state.selectedCanvasIds.has(it.id)) return;
+              it.canvas.frameWidth = fw;
+              if (!it.canvas.frameColor && it.canvas.frame !== 'white') it.canvas.frameColor = '#FFFFFF';
+              const fCol = it.canvas.frameColor || '#FFFFFF';
+              const el = stage.querySelector(`.canvas-item[data-canvas-id="${it.id}"]`);
+              if (el) el.style.border = `${fw}px solid ${fCol}`;
+            });
+          });
+          selFrameWidthInp.addEventListener('change', () => scheduleBoardSave(folderId));
+        }
+
+        const selShadowBtn = document.getElementById('selShadowToggleBtn');
+        if (selShadowBtn) selShadowBtn.addEventListener('click', () => {
+          const selItems = visualItems.filter((it) => state.selectedCanvasIds.has(it.id));
+          const allOn = selItems.every((it) => it.canvas.shadow !== false);
+          selItems.forEach((it) => { it.canvas.shadow = !allOn; });
+          scheduleBoardSave(folderId);
+          renderCanvasView(container, statsEl, folderId);
+        });
+
+        const selResetBtn = document.getElementById('selResetBtn');
+        if (selResetBtn) selResetBtn.addEventListener('click', () => {
+          for (const it of visualItems) {
+            if (!state.selectedCanvasIds.has(it.id)) continue;
+            it.canvas.shape = 'rect';
+            it.canvas.frameColor = '';
+            delete it.canvas.frame;
+            delete it.canvas.frameWidth;
+            delete it.canvas.shadow;
+            delete it.canvas.fitMode;
+            delete it.canvas.cropX;
+            delete it.canvas.cropY;
+            delete it.canvas.cropZoom;
+            const imgEl = stage.querySelector(`.canvas-item[data-canvas-id="${it.id}"] img`);
+            if (imgEl && imgEl.naturalWidth > 0 && imgEl.naturalHeight > 0) {
+              it.canvas.h = Math.max(60, Math.round(it.canvas.w * (imgEl.naturalHeight / imgEl.naturalWidth)));
+            }
+          }
+          scheduleBoardSave(folderId);
+          renderCanvasView(container, statsEl, folderId);
+        });
 
         function applyCropToSelected() {
           const cx = Number(document.getElementById('selCropX')?.value ?? 50);
@@ -703,6 +764,10 @@
           saveCanvasSetting({ showGrid: next });
           renderCanvasView(container, statsEl, folderId);
         });
+        document.getElementById('canvasSnapBtn').addEventListener('click', () => {
+          saveCanvasSetting({ snapToGrid: !snapToGrid });
+          renderCanvasView(container, statsEl, folderId);
+        });
         document.getElementById('canvasLockBtn').addEventListener('click', () => {
           state.canvasLocked = !state.canvasLocked;
           renderCanvasView(container, statsEl, folderId);
@@ -815,14 +880,17 @@
             viewport.scrollTop = activeAction.origScrollY - (e.clientY - activeAction.startY);
           } else if (activeAction.type === 'drag') {
             activeAction.moved = true;
-            activeAction.box.x = Math.round(activeAction.origX + dx);
-            activeAction.box.y = Math.round(activeAction.origY + dy);
+            const rawX = activeAction.origX + dx;
+            const rawY = activeAction.origY + dy;
+            activeAction.box.x = snapToGrid ? Math.round(rawX / 12) * 12 : Math.round(rawX);
+            activeAction.box.y = snapToGrid ? Math.round(rawY / 12) * 12 : Math.round(rawY);
             activeAction.itemEl.style.left = activeAction.box.x + 'px';
             activeAction.itemEl.style.top = activeAction.box.y + 'px';
           } else if (activeAction.type === 'resize') {
             activeAction.moved = true;
-            const newW = Math.max(60, Math.round(activeAction.origW + dx));
-            let newH = Math.max(36, Math.round(activeAction.origH + dy));
+            const rawW = Math.max(60, activeAction.origW + dx);
+            let newW = snapToGrid ? Math.max(60, Math.round(rawW / 12) * 12) : Math.round(rawW);
+            let newH = snapToGrid ? Math.max(36, Math.round((activeAction.origH + dy) / 12) * 12) : Math.max(36, Math.round(activeAction.origH + dy));
             if (activeAction.aspectRatio > 0 && !e.shiftKey) {
               newH = Math.max(60, Math.round(newW * activeAction.aspectRatio));
             }
@@ -847,24 +915,31 @@
           document.getElementById('ctTextInput').value = el.text || '';
           document.getElementById('ctShapeSelect').value = el.shape || 'none';
           document.getElementById('ctFontSelect').value = el.fontStyle || 'sans';
+          document.getElementById('ctAlignSelect').value = el.textAlign || 'center';
           document.getElementById('ctFontSizeInput').value = el.fontSize || 24;
           const colVal = (el.color || '#262927').toUpperCase();
           const bgVal = (el.bgColor || '#262927').toUpperCase();
+          const fColVal = (el.frameColor || '#FFFFFF').toUpperCase();
           document.getElementById('ctColorInput').value = colVal;
           document.getElementById('ctColorHex').value = colVal;
           document.getElementById('ctBgColorInput').value = bgVal;
           document.getElementById('ctBgColorHex').value = bgVal;
+          document.getElementById('ctFrameColorInput').value = fColVal;
+          document.getElementById('ctFrameColorHex').value = fColVal;
           bindHexColorPair(document.getElementById('ctColorInput'), document.getElementById('ctColorHex'), () => {});
           bindHexColorPair(document.getElementById('ctBgColorInput'), document.getElementById('ctBgColorHex'), () => {});
+          bindHexColorPair(document.getElementById('ctFrameColorInput'), document.getElementById('ctFrameColorHex'), () => {});
           document.getElementById('ctWhiteFrameCb').checked = !!el.frame;
           document.getElementById('ctSaveBtn').onclick = () => {
             el.text = document.getElementById('ctTextInput').value || 'Text';
             el.shape = document.getElementById('ctShapeSelect').value;
             el.fontStyle = document.getElementById('ctFontSelect').value;
+            el.textAlign = document.getElementById('ctAlignSelect').value;
             el.fontSize = Math.max(12, Math.min(96, Number(document.getElementById('ctFontSizeInput').value) || 24));
             el.color = document.getElementById('ctColorInput').value;
             el.bgColor = document.getElementById('ctBgColorInput').value;
             el.frame = document.getElementById('ctWhiteFrameCb').checked;
+            el.frameColor = document.getElementById('ctFrameColorInput').value;
             if (el.shape === 'circle') {
               const s = Math.max(120, Math.min(el.w, el.h) < 120 ? 160 : el.w);
               el.w = s;
@@ -878,6 +953,7 @@
         } else if (el.type === 'palette') {
           let draftColors = Array.isArray(el.colors) ? el.colors.slice() : ['#4A5D3B', '#A8A84D', '#5D8798', '#8BB5BF', '#EAEAEA'];
           document.getElementById('cpShapeSelect').value = el.shape || 'rect';
+          document.getElementById('cpOrientationSelect').value = el.orientation || 'horizontal';
           function renderSwatches() {
             const list = document.getElementById('cpSwatchesList');
             list.innerHTML = draftColors.map((hex, idx) => `
@@ -913,6 +989,13 @@
           document.getElementById('cpSaveBtn').onclick = () => {
             el.colors = draftColors;
             el.shape = document.getElementById('cpShapeSelect').value;
+            const nextOri = document.getElementById('cpOrientationSelect').value;
+            if ((el.orientation || 'horizontal') !== nextOri) {
+              const oldW = el.w;
+              el.w = el.h;
+              el.h = oldW;
+            }
+            el.orientation = nextOri;
             scheduleBoardSave(folderId);
             closeModal('canvasPaletteModal');
             renderCanvasView(container, statsEl, folderId);
@@ -985,54 +1068,76 @@
             try { ctx.drawImage(imgEl, dx, dy, dw, dh); } catch (err) {}
             ctx.restore();
             const fCol = e.box.frameColor || (e.box.frame === 'white' ? '#FFFFFF' : '');
+            const fw = Math.max(1, Number(e.box.frameWidth) || 6);
             if (fCol) {
               ctx.save();
               ctx.strokeStyle = fCol;
-              ctx.lineWidth = 6;
+              ctx.lineWidth = fw;
               if (e.box.shape === 'circle') {
                 ctx.beginPath();
-                ctx.arc(x + bw / 2, y + bh / 2, Math.min(bw, bh) / 2 - 3, 0, Math.PI * 2);
+                ctx.arc(x + bw / 2, y + bh / 2, Math.min(bw, bh) / 2 - fw / 2, 0, Math.PI * 2);
                 ctx.stroke();
               } else {
-                ctx.strokeRect(x + 3, y + 3, bw - 6, bh - 6);
+                ctx.strokeRect(x + fw / 2, y + fw / 2, bw - fw, bh - fw);
               }
               ctx.restore();
             }
           } else if (e.obj.type === 'palette') {
             const cols = Array.isArray(e.obj.colors) ? e.obj.colors : [];
             const gap = 8;
-            const sw = (bw - gap * Math.max(0, cols.length - 1)) / Math.max(1, cols.length);
-            cols.forEach((hex, idx) => {
-              ctx.fillStyle = hex;
-              const sx = x + idx * (sw + gap);
-              if (e.obj.shape === 'circle') {
-                const r = Math.min(sw, bh) / 2;
-                ctx.beginPath();
-                ctx.arc(sx + sw / 2, y + bh / 2, r, 0, Math.PI * 2);
-                ctx.fill();
-              } else {
-                ctx.fillRect(sx, y, sw, bh);
-              }
-            });
+            const isVert = e.obj.orientation === 'vertical';
+            if (isVert) {
+              const sh = (bh - gap * Math.max(0, cols.length - 1)) / Math.max(1, cols.length);
+              cols.forEach((hex, idx) => {
+                ctx.fillStyle = hex;
+                const sy = y + idx * (sh + gap);
+                if (e.obj.shape === 'circle') {
+                  const r = Math.min(bw, sh) / 2;
+                  ctx.beginPath();
+                  ctx.arc(x + bw / 2, sy + sh / 2, r, 0, Math.PI * 2);
+                  ctx.fill();
+                } else {
+                  ctx.fillRect(x, sy, bw, sh);
+                }
+              });
+            } else {
+              const sw = (bw - gap * Math.max(0, cols.length - 1)) / Math.max(1, cols.length);
+              cols.forEach((hex, idx) => {
+                ctx.fillStyle = hex;
+                const sx = x + idx * (sw + gap);
+                if (e.obj.shape === 'circle') {
+                  const r = Math.min(sw, bh) / 2;
+                  ctx.beginPath();
+                  ctx.arc(sx + sw / 2, y + bh / 2, r, 0, Math.PI * 2);
+                  ctx.fill();
+                } else {
+                  ctx.fillRect(sx, y, sw, bh);
+                }
+              });
+            }
           } else if (e.obj.type === 'text') {
             ctx.save();
+            const tfCol = e.obj.frameColor || '#FFFFFF';
             if (e.obj.shape === 'circle') {
               ctx.beginPath();
               ctx.arc(x + bw / 2, y + bh / 2, Math.min(bw, bh) / 2, 0, Math.PI * 2);
               ctx.fillStyle = e.obj.bgColor || '#262927';
               ctx.fill();
-              if (e.obj.frame) { ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 6; ctx.stroke(); }
+              if (e.obj.frame) { ctx.strokeStyle = tfCol; ctx.lineWidth = 6; ctx.stroke(); }
             } else if (e.obj.shape === 'pill') {
               ctx.beginPath();
               ctx.roundRect(x, y, bw, bh, 12);
               ctx.fillStyle = e.obj.bgColor || '#262927';
               ctx.fill();
+              if (e.obj.frame) { ctx.strokeStyle = tfCol; ctx.lineWidth = 6; ctx.stroke(); }
             }
             const fs = Number(e.obj.fontSize) || 24;
             const fam = e.obj.fontStyle === 'serif' ? 'Georgia, serif' : 'system-ui, sans-serif';
             ctx.font = `${e.obj.fontStyle === 'outline' ? '800' : '500'} ${fs}px ${fam}`;
-            ctx.textAlign = 'center';
+            const align = e.obj.textAlign || 'center';
+            ctx.textAlign = align;
             ctx.textBaseline = 'middle';
+            const tx = align === 'left' ? x + 12 : (align === 'right' ? x + bw - 12 : x + bw / 2);
             const lines = String(e.obj.text || '').split('\n');
             const lh = fs * 1.18;
             const startY = y + bh / 2 - ((lines.length - 1) * lh) / 2;
@@ -1040,10 +1145,10 @@
               if (e.obj.fontStyle === 'outline') {
                 ctx.strokeStyle = e.obj.color || '#A59858';
                 ctx.lineWidth = 1.5;
-                ctx.strokeText(ln, x + bw / 2, startY + li * lh);
+                ctx.strokeText(ln, tx, startY + li * lh);
               } else {
                 ctx.fillStyle = e.obj.color || '#262927';
-                ctx.fillText(ln, x + bw / 2, startY + li * lh);
+                ctx.fillText(ln, tx, startY + li * lh);
               }
             });
             ctx.restore();
