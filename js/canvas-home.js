@@ -80,6 +80,7 @@
             <div class="canvas-toolbar-group">
               <button id="canvasAddImageBtn" class="btn btn-oak btn-sm" type="button">＋ Bild</button>
               <button id="canvasAddBookmarkBtn" class="btn btn-sm" type="button">＋ Bookmark</button>
+              <button id="canvasAddFromInvBtn" class="btn btn-sm" type="button" title="Elemente aus dem Inventory hier einbinden">📦 Aus Inventory</button>
               <button id="canvasAutoLayoutBtn" class="btn btn-sm" type="button" title="Richtet Kacheln am Raster aus und behält deine Reihenfolge bei">🧲 Ausrichten</button>
               <button id="canvasLockBtn" class="btn btn-sm ${state.canvasLocked ? 'btn-oak' : ''}" type="button" title="Verschieben sperren/entsperren">
                 ${state.canvasLocked ? '🔒 Gesperrt' : '🔓 Frei'}
@@ -147,9 +148,10 @@
           <div class="canvas-split-layout ${state.canvasSplitOpen ? 'with-split' : ''}">
             <div id="canvasViewport" class="canvas-viewport ${showGrid ? '' : 'no-grid'} ${bgMode === 'white' ? 'bg-white' : (bgMode === 'dark' ? 'bg-dark' : '')}">
               <div id="canvasStage" class="canvas-stage" style="width:${Math.round(maxRight * state.canvasZoom)}px; height:${Math.round(maxBottom * state.canvasZoom)}px; transform: scale(${state.canvasZoom});">
-                ${visualItems.map((item) => {
-                  const c = item.canvas;
-                  const isSelected = state.selectedCanvasIds.has(item.id);
+                ${visualItems.map((rawItem) => {
+                  const item = resolveBoardItem(rawItem, folderId);
+                  const c = rawItem.canvas;
+                  const isSelected = state.selectedCanvasIds.has(rawItem.id);
                   const src = item.localDataUrl || item.previewImageUrl || '';
                   const hasVisual = !!(src || item.driveFileId);
                   const linkUrl = item.url || item.sourceUrl || '';
@@ -157,7 +159,7 @@
                   try { if (linkUrl) domain = new URL(linkUrl).hostname.replace(/^www\./, ''); } catch (e) {}
                   return `
                     <div class="canvas-item ${isSelected ? 'selected' : ''} ${fitMode === 'contain' ? 'fit-contain' : ''}"
-                         data-canvas-id="${item.id}"
+                         data-canvas-id="${rawItem.id}"
                          style="left:${c.x}px; top:${c.y}px; width:${c.w}px; height:${c.h}px; z-index:${c.z || 1};">
                       ${hasVisual
                         ? `<img src="${escapeHtml(src)}" alt="${escapeHtml(item.title)}" data-drive-img="${item.driveFileId || ''}" />`
@@ -247,6 +249,8 @@
           stage.style.height = `${Math.round(maxBottom * state.canvasZoom)}px`;
           document.getElementById('canvasZoomLabel').textContent = `${Math.round(state.canvasZoom * 100)} %`;
         });
+        const invCanvasBtn = document.getElementById('canvasAddFromInvBtn');
+        if (invCanvasBtn) invCanvasBtn.addEventListener('click', () => openInventoryPickerModal(folderId));
         document.getElementById('canvasZoomOutBtn').addEventListener('click', () => {
           state.canvasZoom = Math.max(0.35, +(state.canvasZoom - 0.15).toFixed(2));
           stage.style.transform = `scale(${state.canvasZoom})`;
@@ -496,7 +500,7 @@
 
         statsEl.textContent = edit ? 'Bearbeitungs-Modus aktiv' : 'Projekt-Übersicht';
 
-        const imageItems = (content.board.items || []).filter((it) => it.type === 'image' || it.previewImageUrl);
+        const imageItems = (content.board.items || []).map((it) => resolveBoardItem(it, folderId)).filter((it) => it && (it.type === 'image' || it.previewImageUrl));
         const floorplanItem = imageItems.find((it) => it.id === home.floorplan.imageItemId) || null;
 
         container.innerHTML = `
@@ -804,7 +808,7 @@
          ======================================================================== */
       async function openEyedropperModal(folderId) {
         const content = state.folderContents[folderId];
-        const images = (content.board.items || []).filter((it) => it.type === 'image');
+        const images = (content.board.items || []).map((it) => resolveBoardItem(it, folderId)).filter((it) => it && it.type === 'image');
         if (images.length === 0) {
           await uiAlert('Bitte lade zuerst mindestens ein eigenes Bild in diesen Ordner hoch, um Farben per Pipette aufzunehmen.');
           return;
