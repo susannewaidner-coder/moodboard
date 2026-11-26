@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>Moodboard &amp; Projekt-Planer — Google Drive</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <link rel="stylesheet" href="css/styles.css?v=1.0.31" />
+  <link rel="stylesheet" href="css/styles.css?v=1.0.32" />
 </head>
 </head>
 <body>
@@ -516,11 +516,17 @@
         </div>
         <div class="form-group">
           <label class="form-label" for="ctColorInput">Textfarbe</label>
-          <input id="ctColorInput" class="form-control" type="color" value="#262927" style="height:38px; padding:2px;" />
+          <div class="hex-color-pair">
+            <input id="ctColorInput" class="form-control" type="color" value="#262927" />
+            <input id="ctColorHex" class="form-control hex-input" type="text" maxlength="7" placeholder="#262927" />
+          </div>
         </div>
         <div class="form-group">
           <label class="form-label" for="ctBgColorInput">Hintergrund</label>
-          <input id="ctBgColorInput" class="form-control" type="color" value="#262927" style="height:38px; padding:2px;" />
+          <div class="hex-color-pair">
+            <input id="ctBgColorInput" class="form-control" type="color" value="#262927" />
+            <input id="ctBgColorHex" class="form-control hex-input" type="text" maxlength="7" placeholder="#262927" />
+          </div>
         </div>
       </div>
       <label style="display:flex; align-items:center; gap:8px; font-size:0.84rem; cursor:pointer; margin-bottom:10px;">
@@ -626,9 +632,9 @@
     </div>
   </div>
 
-  <script defer src="js/core.js?v=1.0.31"></script>
-  <script defer src="js/views.js?v=1.0.31"></script>
-  <script defer src="js/canvas-home.js?v=1.0.31"></script>
-  <script defer src="js/ai-pdf.js?v=1.0.31"></script>
+  <script defer src="js/core.js?v=1.0.32"></script>
+  <script defer src="js/views.js?v=1.0.32"></script>
+  <script defer src="js/canvas-home.js?v=1.0.32"></script>
+  <script defer src="js/ai-pdf.js?v=1.0.32"></script>
 </body>
 </html>
