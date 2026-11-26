@@ -4,7 +4,7 @@
       /* ========================================================================
          1. KONFIGURATION & STATE
          ======================================================================== */
-      const APP_VERSION = 'v1.0.29';
+      const APP_VERSION = 'v1.0.30';
       const LS_KEYS = {
         clientId: 'mb_oauth_client_id',
         rootName: 'mb_root_folder_name',
@@ -643,8 +643,20 @@
             refItem: null
           };
         }
-        const invContent = state.folderContents[item.refFolderId];
-        const orig = invContent ? (invContent.board.items || []).find((i) => i.id === item.refItemId) : null;
+        let resolvedFolderId = item.refFolderId;
+        const invContent = state.folderContents[resolvedFolderId];
+        let orig = invContent ? (invContent.board.items || []).find((i) => i.id === item.refItemId) : null;
+        if (!orig) {
+          for (const invF of getInventoryFolders()) {
+            const fc = state.folderContents[invF.id];
+            const found = fc ? (fc.board.items || []).find((i) => i.id === item.refItemId) : null;
+            if (found) {
+              orig = found;
+              resolvedFolderId = invF.id;
+              break;
+            }
+          }
+        }
         if (!orig) {
           return {
             ...item,
@@ -678,23 +690,30 @@
           },
           isRef: true,
           isMissingRef: false,
-          refFolderId: item.refFolderId,
+          refFolderId: resolvedFolderId,
           refItemId: item.refItemId,
           targetItem: orig,
-          targetFolderId: item.refFolderId,
+          targetFolderId: resolvedFolderId,
           refItem: item
         };
       }
 
       async function preloadReferencedInventoryFolders(board) {
         if (!board || !Array.isArray(board.items)) return;
+        const refs = board.items.filter((it) => it.type === 'ref' && it.refFolderId);
         const needed = Array.from(new Set(
-          board.items
-            .filter((it) => it.type === 'ref' && it.refFolderId && !state.folderContents[it.refFolderId])
-            .map((it) => it.refFolderId)
+          refs.filter((it) => !state.folderContents[it.refFolderId]).map((it) => it.refFolderId)
         ));
         if (needed.length > 0 && typeof ensureFoldersLoaded === 'function') {
           await ensureFoldersLoaded(needed);
+        }
+        const hasMissing = refs.some((it) => {
+          const fc = state.folderContents[it.refFolderId];
+          return !fc || !(fc.board.items || []).some((x) => x.id === it.refItemId);
+        });
+        if (hasMissing && typeof ensureFoldersLoaded === 'function') {
+          const allInv = getInventoryFolders().map((f) => f.id).filter((id) => !state.folderContents[id]);
+          if (allInv.length > 0) await ensureFoldersLoaded(allInv);
         }
       }
 
