@@ -1317,6 +1317,10 @@
               ctx.beginPath();
               ctx.roundRect(x, y, bw, bh, 12);
               ctx.clip();
+            } else {
+              ctx.beginPath();
+              ctx.rect(x, y, bw, bh);
+              ctx.clip();
             }
             const itemFit = e.box.fitMode || fitMode;
             const ir = imgEl.naturalWidth / imgEl.naturalHeight;
@@ -1440,92 +1444,150 @@
         }
       }
 
-      function buildEditorialFallbackLayout(visualItems, projectTitle, paletteColors) {
+      function buildEditorialGridPlan(visualItems, director, projectTitle, fallbackPalette) {
         const gap = 14;
         const boardW = 840;
         const startX = 40;
-        const startY = 40;
-        const cols = 3;
-        const colW = Math.round((boardW - gap * (cols - 1)) / cols);
-        const colY = [startY, startY, startY];
+        let curY = 40;
+
+        const idMap = new Map(visualItems.map((it) => [it.id, it]));
+        const orderedIds = Array.isArray(director.orderedIds)
+          ? director.orderedIds.filter((id) => idMap.has(id))
+          : [];
+        for (const it of visualItems) {
+          if (!orderedIds.includes(it.id)) orderedIds.push(it.id);
+        }
+
+        const circleSet = new Set(Array.isArray(director.circleIds) ? director.circleIds.filter((id) => idMap.has(id)).slice(0, 2) : []);
+        if (circleSet.size === 0 && orderedIds.length >= 6) {
+          circleSet.add(orderedIds[orderedIds.length - 1]);
+        }
+
+        const gridIds = orderedIds.filter((id) => !circleSet.has(id));
         const itemsLayout = [];
+        let zCounter = 1;
 
-        const circleIndices = visualItems.length >= 5 ? [visualItems.length - 1] : [];
-        const gridItems = visualItems.filter((_, idx) => !circleIndices.includes(idx));
+        // Hilfsfunktion: Reihe mit exakt bündiger Breite boardW & gleicher Höhe
+        function layoutRow(rowIds, rowH) {
+          if (rowIds.length === 0) return;
+          const totalGap = gap * (rowIds.length - 1);
+          const availW = boardW - totalGap;
+          const aspects = rowIds.map((id) => {
+            const it = idMap.get(id);
+            const ar = (it.canvas && it.canvas.w && it.canvas.h) ? (it.canvas.w / it.canvas.h) : 1;
+            return Math.max(0.55, Math.min(1.85, ar));
+          });
+          const sumAr = aspects.reduce((s, a) => s + a, 0);
+          let curX = startX;
+          rowIds.forEach((id, idx) => {
+            const isLast = idx === rowIds.length - 1;
+            const w = isLast ? (startX + boardW - curX) : Math.round((aspects[idx] / sumAr) * availW);
+            itemsLayout.push({ id, x: curX, y: curY, w, h: rowH, z: zCounter++, shape: 'rect', frameColor: '', shadow: false });
+            curX += w + gap;
+          });
+          curY += rowH + gap;
+        }
 
-        gridItems.forEach((it, idx) => {
-          let cIdx = 0;
-          if (colY[1] < colY[cIdx]) cIdx = 1;
-          if (colY[2] < colY[cIdx]) cIdx = 2;
+        // 1) Hero-Block oben (falls >= 3 Grid-Bilder: 1 großes links + 2 gestapelt rechts, sonst 1 Reihe)
+        let cursor = 0;
+        if (gridIds.length >= 3) {
+          const heroId = gridIds[0];
+          const r1Id = gridIds[1];
+          const r2Id = gridIds[2];
+          const leftW = Math.round(boardW * 0.58) - Math.round(gap / 2);
+          const rightW = boardW - leftW - gap;
+          const heroH = 340;
+          const subH = Math.round((heroH - gap) / 2);
+          itemsLayout.push({ id: heroId, x: startX, y: curY, w: leftW, h: heroH, z: zCounter++, shape: 'rect', frameColor: '', shadow: false });
+          itemsLayout.push({ id: r1Id, x: startX + leftW + gap, y: curY, w: rightW, h: subH, z: zCounter++, shape: 'rect', frameColor: '', shadow: false });
+          itemsLayout.push({ id: r2Id, x: startX + leftW + gap, y: curY + subH + gap, w: rightW, h: heroH - subH - gap, z: zCounter++, shape: 'rect', frameColor: '', shadow: false });
+          curY += heroH + gap;
+          cursor = 3;
+        }
 
-          // Erste Kachel darf 2 Spalten breit sein, wenn genug Bilder da sind
-          const span2 = (idx === 0 && gridItems.length >= 4);
-          const w = span2 ? colW * 2 + gap : colW;
-          const ar = (it.canvas && it.canvas.w && it.canvas.h) ? (it.canvas.h / it.canvas.w) : 0.85;
-          const h = Math.max(130, Math.min(340, Math.round(w * ar)));
-          const x = startX + (span2 ? 0 : cIdx * (colW + gap));
-          const y = span2 ? startY : colY[cIdx];
-
-          itemsLayout.push({ id: it.id, x, y, w, h, z: idx + 1, shape: 'rect', frameColor: '', shadow: false });
-          if (span2) {
-            colY[0] = y + h + gap;
-            colY[1] = y + h + gap;
-          } else {
-            colY[cIdx] = y + h + gap;
-          }
-        });
-
-        const maxGridY = Math.max(...colY);
+        const paletteY = curY;
+        const palColors = (Array.isArray(director.palette) && director.palette.length >= 3 ? director.palette : fallbackPalette).slice(0, 5);
         const elements = [
           {
             id: uid('cel'),
             type: 'palette',
             x: startX,
-            y: maxGridY + 4,
+            y: paletteY,
             w: boardW,
-            h: 58,
-            z: 15,
-            colors: paletteColors.slice(0, 5),
+            h: 54,
+            z: 18,
+            colors: palColors,
             shape: 'rect',
             orientation: 'horizontal'
-          },
-          {
-            id: uid('cel'),
-            type: 'text',
-            x: startX + Math.round(boardW / 2) - 180,
-            y: startY + 28,
-            w: 360,
-            h: 72,
-            z: 25,
-            text: projectTitle || 'Moodboard',
-            fontSize: 34,
-            fontStyle: 'serif',
-            textAlign: 'center',
-            color: '#262927',
-            bgColor: '#262927',
-            shape: 'none',
-            frame: false
           }
         ];
+        curY += 54 + gap;
 
-        circleIndices.forEach((ci) => {
-          const it = visualItems[ci];
+        // 2) Restliche Bilder in saubere 3er- oder 2er-Reihen aufteilen (ohne Rest-Lücke!)
+        const rest = gridIds.slice(cursor);
+        let rIdx = 0;
+        while (rIdx < rest.length) {
+          const remaining = rest.length - rIdx;
+          const count = remaining === 4 ? 2 : Math.min(3, remaining);
+          const rowIds = rest.slice(rIdx, rIdx + count);
+          const rowH = count === 1 ? 260 : (count === 2 ? 250 : 215);
+          layoutRow(rowIds, rowH);
+          rIdx += count;
+        }
+
+        // 3) Kreis-Details sauber auf Schnittpunkte setzen
+        const circleList = Array.from(circleSet);
+        if (circleList[0]) {
           itemsLayout.push({
-            id: it.id,
-            x: startX + colW - 40,
-            y: startY + 140,
-            w: 190,
-            h: 190,
-            z: 22,
+            id: circleList[0],
+            x: startX + Math.round(boardW * 0.58) - 85,
+            y: Math.max(40, paletteY - 125),
+            w: 170,
+            h: 170,
+            z: 24,
             shape: 'circle',
             frameColor: '#FFFFFF',
             frameWidth: 6,
             shadow: true
           });
+        }
+        if (circleList[1] && curY > paletteY + 200) {
+          itemsLayout.push({
+            id: circleList[1],
+            x: startX + Math.round(boardW * 0.33) - 80,
+            y: paletteY + 145,
+            w: 160,
+            h: 160,
+            z: 25,
+            shape: 'circle',
+            frameColor: '#FFFFFF',
+            frameWidth: 6,
+            shadow: true
+          });
+        }
+
+        // 4) Typo-Badge (dunkler Kreis mit weißem Rand wie im Minimalist-Beispiel)
+        elements.push({
+          id: uid('cel'),
+          type: 'text',
+          x: startX + 24,
+          y: paletteY - 115,
+          w: 155,
+          h: 155,
+          z: 26,
+          text: director.badgeText || projectTitle || 'Moodboard',
+          fontSize: 18,
+          fontStyle: 'sans',
+          textAlign: 'center',
+          color: '#FFFFFF',
+          bgColor: director.badgeBg || '#262927',
+          shape: 'circle',
+          frame: true,
+          frameColor: '#FFFFFF'
         });
 
         return {
-          bgColor: '#F8F7F4',
+          bgColor: director.bgColor || '#F6F4EF',
           collageMode: true,
           items: itemsLayout,
           elements
@@ -1542,13 +1604,13 @@
         const home = content.board.projectHome || {};
         const projectTitle = home.title || (folder ? folder.name : 'Moodboard');
         const imgs = Array.from(stage.querySelectorAll('.canvas-item img'));
-        const extracted = extractColorsFromImages(imgs, 5);
+        const extracted = extractColorsFromImages(imgs, 8).filter((h) => h !== '#FFFFFF' && h !== '#000000');
         const swatchHexes = (home.swatches || []).map((s) => s.hex).filter(Boolean);
-        const paletteColors = Array.from(new Set([...swatchHexes, ...extracted, '#4A5D3B', '#A8A84D', '#5D8798', '#8BB5BF', '#EAEAEA'])).slice(0, 5);
+        const fallbackPalette = Array.from(new Set([...swatchHexes, ...extracted, '#C59B6D', '#4A5D3B', '#5D8798', '#EAE6DF', '#262927'])).slice(0, 5);
 
-        let plan = null;
+        let director = {};
         if (geminiKey) {
-          showSyncStatus('✨ KI entwirft Moodboard-Layout…', true);
+          showSyncStatus('✨ KI kuratiert Reihenfolge, Farben & Highlights…', true);
           try {
             const itemInfos = visualItems.map((it) => {
               const resolved = resolveBoardItem(it, folderId);
@@ -1565,65 +1627,48 @@
               };
             });
 
-            const prompt = `Du bist Editorial-Moodboard-Designer. Erstelle ein harmonisches, aufgeräumtes Collage-Layout (ca. 860px Gesamtbreite, Start bei x=40, y=40, gleichmäßige Abstände 12-16px) im Stil moderner Interior-/Design-Moodboards (wie "Minimalist Design" oder "Coastal": asymmetrisches mehrspaltiges Raster aus großen Hero- und Detail-Kacheln, 1-2 überlappende runde Kreis-Ausschnitte mit weißem 6px-Rand an Schnittpunkten, ein 5-Farben-Palettenstreifen zwischen Reihen, ein passender Hintergrundton und 1-2 Typo-Elemente wie ein Projekttitel oder ein dunkler runder Text-Badge mit weißem Rand).
-Projekt: ${JSON.stringify({ title: projectTitle, eyebrow: home.eyebrow || '', lead: home.lead || '', swatches: home.swatches || [], suggestedPalette: paletteColors })}
-Vorhandene Bilder (ALLE IDs müssen exakt einmal im Ergebnis vorkommen): ${JSON.stringify(itemInfos)}
-Antworte ausschließlich als JSON in diesem Format:
-{
-  "bgColor": "#F8F7F4",
-  "items": [
-    {"id":"...", "x":40, "y":40, "w":420, "h":240, "z":1, "shape":"rect|rounded|circle", "frameColor":""}
-  ],
-  "elements": [
-    {"type":"palette", "x":40, "y":560, "w":840, "h":56, "z":15, "colors":["#...","#...","#...","#...","#..."], "orientation":"horizontal", "shape":"rect"},
-    {"type":"text", "x":180, "y":170, "w":170, "h":170, "z":22, "text":"...", "fontSize":20, "fontStyle":"sans|serif|outline", "shape":"none|pill|circle", "color":"#FFFFFF", "bgColor":"#262927", "frame":true, "frameColor":"#FFFFFF", "textAlign":"center"}
-  ]
-}`;
-            plan = await requestGeminiJson(prompt, geminiKey, 3072, 0.45);
+            const prompt = `Du bist Creative Director für Editorial-Moodboards. Kuratiere die Reihenfolge und Highlights für ein Projekt-Moodboard (das exakte Raster berechnet danach unsere Layout-Engine, du gibst KEINE Pixelkoordinaten aus).
+Projekt: ${JSON.stringify({ title: projectTitle, eyebrow: home.eyebrow || '', lead: home.lead || '', swatches: home.swatches || [], extractedColors: fallbackPalette })}
+Bilder: ${JSON.stringify(itemInfos)}
+Regeln:
+- "orderedIds": Alle Bild-IDs in harmonischer Reihenfolge. Das ERSTE Bild ist das große Hero-Bild (am besten ein stimmungsvolles Querformat/Szene-Bild). Danach 2 passende Ergänzungsbilder, dann weitere thematisch/farblich gruppiert.
+- "circleIds": 1-2 IDs von Detail-/Akzentbildern (z. B. kleines Deko-Objekt), die als runde Kreis-Ausschnitte hervorgehoben werden.
+- "bgColor": Eine sehr dezente, helle Hintergrundfarbe als Hex passend zum Thema (z. B. "#F6F2EA", "#F3F5F8", "#F4F6F2", "#FFFFFF").
+- "palette": Genau 5 harmonische Hex-Farben passend zu Projekt & Bildern (echte Akzent- und Materialfarben, nicht nur Grau).
+- "badgeText": Kurzer, stilvoller 1-3-Wort-Titel für das runde Badge (z. B. "${projectTitle}").
+- "badgeBg": Dunkler oder warmer Akzent-Hex für das runde Badge (z. B. "#262927", "#2F5241", "#5D4E3E").
+Antworte ausschließlich als JSON.`;
+            director = await requestGeminiJson(prompt, geminiKey, 1500, 0.35);
           } catch (err) {
             console.warn('KI-Layout Fallback aktiv:', err);
           }
           showSyncStatus('', false);
         }
 
-        if (!plan || !Array.isArray(plan.items) || plan.items.length === 0) {
-          plan = buildEditorialFallbackLayout(visualItems, projectTitle, paletteColors);
-        }
+        const plan = buildEditorialGridPlan(visualItems, director || {}, projectTitle, fallbackPalette);
 
         pushCanvasUndo(folderId);
 
-        const planMap = new Map((plan.items || []).map((p) => [p.id, p]));
-        visualItems.forEach((it, idx) => {
+        const planMap = new Map(plan.items.map((p) => [p.id, p]));
+        visualItems.forEach((it) => {
           const p = planMap.get(it.id);
           if (p) {
-            it.canvas.x = Math.max(0, Math.round(Number(p.x) || 40));
-            it.canvas.y = Math.max(0, Math.round(Number(p.y) || 40));
-            it.canvas.w = Math.max(80, Math.min(900, Math.round(Number(p.w) || 220)));
-            it.canvas.h = Math.max(80, Math.min(900, Math.round(Number(p.h) || 200)));
-            if (p.shape === 'circle') {
-              const s = Math.min(it.canvas.w, it.canvas.h);
-              it.canvas.w = s;
-              it.canvas.h = s;
-            }
-            it.canvas.z = Math.max(1, Math.round(Number(p.z) || (idx + 1)));
-            it.canvas.shape = ['rect', 'rounded', 'circle'].includes(p.shape) ? p.shape : 'rect';
+            it.canvas.x = p.x;
+            it.canvas.y = p.y;
+            it.canvas.w = p.w;
+            it.canvas.h = p.h;
+            it.canvas.z = p.z;
+            it.canvas.shape = p.shape;
             it.canvas.frameColor = p.frameColor || '';
             it.canvas.frameWidth = p.frameWidth || 6;
-            it.canvas.shadow = p.shadow !== undefined ? !!p.shadow : (it.canvas.shape === 'circle' && !!it.canvas.frameColor);
+            it.canvas.shadow = !!p.shadow;
+            it.canvas.fitMode = 'cover';
             delete it.canvas.frame;
             delete it.canvas._needsAutoAspect;
           }
         });
 
-        content.board.canvasElements = (Array.isArray(plan.elements) ? plan.elements : []).map((el) => ({
-          ...el,
-          id: uid('cel'),
-          x: Math.max(0, Math.round(Number(el.x) || 40)),
-          y: Math.max(0, Math.round(Number(el.y) || 40)),
-          w: Math.max(60, Math.min(960, Math.round(Number(el.w) || 220))),
-          h: Math.max(40, Math.min(600, Math.round(Number(el.h) || 60))),
-          z: Math.max(1, Math.round(Number(el.z) || 15))
-        }));
+        content.board.canvasElements = plan.elements;
 
         if (!content.board.canvasSettings) content.board.canvasSettings = {};
         if (plan.bgColor && /^#[0-9a-fA-F]{6}$/.test(plan.bgColor)) {
