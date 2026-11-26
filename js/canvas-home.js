@@ -202,6 +202,7 @@
               <div id="canvasPaletteBar" class="canvas-palette-bar">
                 <span style="font-size:0.76rem; color:var(--text-muted);">Farben…</span>
               </div>
+              <button id="canvasAiLayoutBtn" class="btn btn-sm" type="button" title="KI-Layout-Vorschlag im Editorial-/Collage-Stil erstellen">✨ KI-Layout</button>
               <button id="canvasCollageBtn" class="btn btn-sm ${collageMode ? 'btn-oak' : ''}" type="button" title="Blendet Titel, Links und Raster für den sauberen Collage-Look aus">✨ Collage</button>
               <button id="canvasExportPngBtn" class="btn btn-sm" type="button" title="Moodboard als PNG-Bild herunterladen">📸 PNG</button>
               <button id="canvasSplitBtn" class="btn btn-sm ${state.canvasSplitOpen ? 'btn-primary' : ''}" type="button">📋 Planung</button>
@@ -949,6 +950,10 @@
           renderCanvasView(container, statsEl, folderId);
         });
 
+        document.getElementById('canvasAiLayoutBtn').addEventListener('click', async () => {
+          await generateAiMoodboardLayout(folderId, visualItems, content, stage, container, statsEl);
+        });
+
         document.getElementById('canvasAddTextBtn').addEventListener('click', () => {
           const all = getAllBoxEntries();
           const maxZ = Math.max(1, ...all.map((e) => (e.box && e.box.z) || 1));
@@ -1433,6 +1438,205 @@
           showSyncStatus('', false);
           await uiAlert('PNG-Export fehlgeschlagen (evtl. blockiert ein externes Bookmark-Bild den Export): ' + err.message, 'Hinweis');
         }
+      }
+
+      function buildEditorialFallbackLayout(visualItems, projectTitle, paletteColors) {
+        const gap = 14;
+        const boardW = 840;
+        const startX = 40;
+        const startY = 40;
+        const cols = 3;
+        const colW = Math.round((boardW - gap * (cols - 1)) / cols);
+        const colY = [startY, startY, startY];
+        const itemsLayout = [];
+
+        const circleIndices = visualItems.length >= 5 ? [visualItems.length - 1] : [];
+        const gridItems = visualItems.filter((_, idx) => !circleIndices.includes(idx));
+
+        gridItems.forEach((it, idx) => {
+          let cIdx = 0;
+          if (colY[1] < colY[cIdx]) cIdx = 1;
+          if (colY[2] < colY[cIdx]) cIdx = 2;
+
+          // Erste Kachel darf 2 Spalten breit sein, wenn genug Bilder da sind
+          const span2 = (idx === 0 && gridItems.length >= 4);
+          const w = span2 ? colW * 2 + gap : colW;
+          const ar = (it.canvas && it.canvas.w && it.canvas.h) ? (it.canvas.h / it.canvas.w) : 0.85;
+          const h = Math.max(130, Math.min(340, Math.round(w * ar)));
+          const x = startX + (span2 ? 0 : cIdx * (colW + gap));
+          const y = span2 ? startY : colY[cIdx];
+
+          itemsLayout.push({ id: it.id, x, y, w, h, z: idx + 1, shape: 'rect', frameColor: '', shadow: false });
+          if (span2) {
+            colY[0] = y + h + gap;
+            colY[1] = y + h + gap;
+          } else {
+            colY[cIdx] = y + h + gap;
+          }
+        });
+
+        const maxGridY = Math.max(...colY);
+        const elements = [
+          {
+            id: uid('cel'),
+            type: 'palette',
+            x: startX,
+            y: maxGridY + 4,
+            w: boardW,
+            h: 58,
+            z: 15,
+            colors: paletteColors.slice(0, 5),
+            shape: 'rect',
+            orientation: 'horizontal'
+          },
+          {
+            id: uid('cel'),
+            type: 'text',
+            x: startX + Math.round(boardW / 2) - 180,
+            y: startY + 28,
+            w: 360,
+            h: 72,
+            z: 25,
+            text: projectTitle || 'Moodboard',
+            fontSize: 34,
+            fontStyle: 'serif',
+            textAlign: 'center',
+            color: '#262927',
+            bgColor: '#262927',
+            shape: 'none',
+            frame: false
+          }
+        ];
+
+        circleIndices.forEach((ci) => {
+          const it = visualItems[ci];
+          itemsLayout.push({
+            id: it.id,
+            x: startX + colW - 40,
+            y: startY + 140,
+            w: 190,
+            h: 190,
+            z: 22,
+            shape: 'circle',
+            frameColor: '#FFFFFF',
+            frameWidth: 6,
+            shadow: true
+          });
+        });
+
+        return {
+          bgColor: '#F8F7F4',
+          collageMode: true,
+          items: itemsLayout,
+          elements
+        };
+      }
+
+      async function generateAiMoodboardLayout(folderId, visualItems, content, stage, container, statsEl) {
+        if (visualItems.length === 0) {
+          await uiAlert('Bitte füge zuerst mindestens ein Bild oder Element zum Moodboard hinzu.');
+          return;
+        }
+        const { geminiKey } = getSettings();
+        const folder = state.folders.find((f) => f.id === folderId);
+        const home = content.board.projectHome || {};
+        const projectTitle = home.title || (folder ? folder.name : 'Moodboard');
+        const imgs = Array.from(stage.querySelectorAll('.canvas-item img'));
+        const extracted = extractColorsFromImages(imgs, 5);
+        const swatchHexes = (home.swatches || []).map((s) => s.hex).filter(Boolean);
+        const paletteColors = Array.from(new Set([...swatchHexes, ...extracted, '#4A5D3B', '#A8A84D', '#5D8798', '#8BB5BF', '#EAEAEA'])).slice(0, 5);
+
+        let plan = null;
+        if (geminiKey) {
+          showSyncStatus('✨ KI entwirft Moodboard-Layout…', true);
+          try {
+            const itemInfos = visualItems.map((it) => {
+              const resolved = resolveBoardItem(it, folderId);
+              const imgEl = stage.querySelector(`.canvas-item[data-canvas-id="${it.id}"] img`);
+              const ar = (imgEl && imgEl.naturalWidth > 0)
+                ? +(imgEl.naturalHeight / imgEl.naturalWidth).toFixed(2)
+                : +((it.canvas.h || 200) / Math.max(1, it.canvas.w || 200)).toFixed(2);
+              return {
+                id: it.id,
+                title: resolved.title || 'Element',
+                tags: resolved.tags || [],
+                aspectRatioHtoW: ar,
+                colors: (resolved.ai && resolved.ai.colorNames) ? resolved.ai.colorNames : []
+              };
+            });
+
+            const prompt = `Du bist Editorial-Moodboard-Designer. Erstelle ein harmonisches, aufgeräumtes Collage-Layout (ca. 860px Gesamtbreite, Start bei x=40, y=40, gleichmäßige Abstände 12-16px) im Stil moderner Interior-/Design-Moodboards (wie "Minimalist Design" oder "Coastal": asymmetrisches mehrspaltiges Raster aus großen Hero- und Detail-Kacheln, 1-2 überlappende runde Kreis-Ausschnitte mit weißem 6px-Rand an Schnittpunkten, ein 5-Farben-Palettenstreifen zwischen Reihen, ein passender Hintergrundton und 1-2 Typo-Elemente wie ein Projekttitel oder ein dunkler runder Text-Badge mit weißem Rand).
+Projekt: ${JSON.stringify({ title: projectTitle, eyebrow: home.eyebrow || '', lead: home.lead || '', swatches: home.swatches || [], suggestedPalette: paletteColors })}
+Vorhandene Bilder (ALLE IDs müssen exakt einmal im Ergebnis vorkommen): ${JSON.stringify(itemInfos)}
+Antworte ausschließlich als JSON in diesem Format:
+{
+  "bgColor": "#F8F7F4",
+  "items": [
+    {"id":"...", "x":40, "y":40, "w":420, "h":240, "z":1, "shape":"rect|rounded|circle", "frameColor":""}
+  ],
+  "elements": [
+    {"type":"palette", "x":40, "y":560, "w":840, "h":56, "z":15, "colors":["#...","#...","#...","#...","#..."], "orientation":"horizontal", "shape":"rect"},
+    {"type":"text", "x":180, "y":170, "w":170, "h":170, "z":22, "text":"...", "fontSize":20, "fontStyle":"sans|serif|outline", "shape":"none|pill|circle", "color":"#FFFFFF", "bgColor":"#262927", "frame":true, "frameColor":"#FFFFFF", "textAlign":"center"}
+  ]
+}`;
+            plan = await requestGeminiJson(prompt, geminiKey, 3072, 0.45);
+          } catch (err) {
+            console.warn('KI-Layout Fallback aktiv:', err);
+          }
+          showSyncStatus('', false);
+        }
+
+        if (!plan || !Array.isArray(plan.items) || plan.items.length === 0) {
+          plan = buildEditorialFallbackLayout(visualItems, projectTitle, paletteColors);
+        }
+
+        pushCanvasUndo(folderId);
+
+        const planMap = new Map((plan.items || []).map((p) => [p.id, p]));
+        visualItems.forEach((it, idx) => {
+          const p = planMap.get(it.id);
+          if (p) {
+            it.canvas.x = Math.max(0, Math.round(Number(p.x) || 40));
+            it.canvas.y = Math.max(0, Math.round(Number(p.y) || 40));
+            it.canvas.w = Math.max(80, Math.min(900, Math.round(Number(p.w) || 220)));
+            it.canvas.h = Math.max(80, Math.min(900, Math.round(Number(p.h) || 200)));
+            if (p.shape === 'circle') {
+              const s = Math.min(it.canvas.w, it.canvas.h);
+              it.canvas.w = s;
+              it.canvas.h = s;
+            }
+            it.canvas.z = Math.max(1, Math.round(Number(p.z) || (idx + 1)));
+            it.canvas.shape = ['rect', 'rounded', 'circle'].includes(p.shape) ? p.shape : 'rect';
+            it.canvas.frameColor = p.frameColor || '';
+            it.canvas.frameWidth = p.frameWidth || 6;
+            it.canvas.shadow = p.shadow !== undefined ? !!p.shadow : (it.canvas.shape === 'circle' && !!it.canvas.frameColor);
+            delete it.canvas.frame;
+            delete it.canvas._needsAutoAspect;
+          }
+        });
+
+        content.board.canvasElements = (Array.isArray(plan.elements) ? plan.elements : []).map((el) => ({
+          ...el,
+          id: uid('cel'),
+          x: Math.max(0, Math.round(Number(el.x) || 40)),
+          y: Math.max(0, Math.round(Number(el.y) || 40)),
+          w: Math.max(60, Math.min(960, Math.round(Number(el.w) || 220))),
+          h: Math.max(40, Math.min(600, Math.round(Number(el.h) || 60))),
+          z: Math.max(1, Math.round(Number(el.z) || 15))
+        }));
+
+        if (!content.board.canvasSettings) content.board.canvasSettings = {};
+        if (plan.bgColor && /^#[0-9a-fA-F]{6}$/.test(plan.bgColor)) {
+          content.board.canvasSettings.bgColor = plan.bgColor;
+          content.board.canvasSettings.bgMode = 'custom';
+        }
+        content.board.canvasSettings.collageMode = true;
+
+        state.selectedCanvasIds.clear();
+        scheduleBoardSave(folderId);
+        renderCanvasView(container, statsEl, folderId);
+        showSyncStatus(geminiKey ? '✨ KI-Layout angewendet (↩️ für Zurück)' : '✨ Editorial-Layout angewendet (↩️ für Zurück)', true);
+        setTimeout(() => showSyncStatus('', false), 3000);
       }
 
       /* ========================================================================

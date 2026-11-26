@@ -223,6 +223,48 @@
         throw new Error('Gemini API vorübergehend überlastet (429/503).');
       }
 
+      async function requestGeminiJson(promptText, apiKey, maxTokens = 2048, temperature = 0.4) {
+        const modelName = await resolveGeminiModel(apiKey);
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+        const body = {
+          contents: [{ parts: [{ text: promptText }] }],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            maxOutputTokens: maxTokens,
+            temperature
+          }
+        };
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          });
+          if (res.status === 429 || res.status === 503) {
+            await new Promise((r) => setTimeout(r, 3000 * (attempt + 1)));
+            continue;
+          }
+          if (!res.ok) {
+            const errTxt = await res.text();
+            throw new Error(`Gemini API (${res.status}): ${errTxt.slice(0, 120)}`);
+          }
+          const json = await res.json();
+          const rawText = (json.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
+          const match = rawText.match(/\{[\s\S]*\}/);
+          const cleaned = (match ? match[0] : rawText).replace(/[\u0000-\u001F]+/g, ' ');
+          try {
+            return JSON.parse(cleaned);
+          } catch (parseErr) {
+            if (attempt < 2) {
+              await new Promise((r) => setTimeout(r, 900));
+              continue;
+            }
+            throw parseErr;
+          }
+        }
+        throw new Error('Gemini API vorübergehend überlastet (429/503).');
+      }
+
       function applyGeminiResultToItem(item, gRes, isNewUpload = false) {
         if (!gRes) return;
         if (!item.ai) item.ai = { colors: [], colorNames: [], labels: [] };
