@@ -31,7 +31,7 @@
               <div class="tree-node" data-folder-id="${folder.id}">
                 <div class="tree-row ${isActive ? 'active' : ''}">
                   <button class="tree-toggle ${hasSub ? '' : 'empty'}" data-toggle-folder="${folder.id}" type="button" title="${hasSub ? (isExpanded ? 'Zuklappen' : 'Ausklappen') : ''}">${hasSub ? (isExpanded ? '▼' : '▶') : ''}</button>
-                  <span class="tree-label" data-select-folder="${folder.id}">${getFolderIcon(folder.id)} ${escapeHtml(folder.name)}</span>
+                  <span class="tree-label" data-select-folder="${folder.id}" title="${escapeHtml(folder.name)}">${getFolderIcon(folder.id)} ${escapeHtml(folder.name)}</span>
                   <span class="tree-actions">
                     <button class="btn-icon" data-folder-menu="${folder.id}" type="button" title="Ordner-Aktionen">⋯</button>
                   </span>
