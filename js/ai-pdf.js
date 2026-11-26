@@ -257,52 +257,57 @@
 
         // Schritt 1: Sofortige Farbanalyse für alle Bilder
         showSyncStatus('Analysiere Farben der Bilder…', true);
-        let updated = false;
+        const touchedFolders = new Set();
         for (const item of images) {
-          if (!item.ai) item.ai = { colors: [], colorNames: [], labels: [] };
-          if (!item.ai.colorNames || item.ai.colorNames.length === 0) {
+          const target = item.targetItem || item;
+          const targetFId = item.targetFolderId || folderId;
+          if (!target.ai) target.ai = { colors: [], colorNames: [], labels: [] };
+          if (!target.ai.colorNames || target.ai.colorNames.length === 0) {
             const src = item.localDataUrl || (item.driveFileId && state.mode === 'drive' ? await DriveAdapter.fetchBlobUrl(item.driveFileId) : '');
             if (src) {
               const res = await analyzeColorsFromUrl(src);
-              item.ai.colors = res.colors;
-              item.ai.colorNames = res.colorNames;
-              updated = true;
+              target.ai.colors = res.colors;
+              target.ai.colorNames = res.colorNames;
+              item.ai = target.ai;
+              touchedFolders.add(targetFId);
             }
           }
         }
-        if (updated) scheduleBoardSave(folderId);
+        for (const fId of touchedFolders) scheduleBoardSave(fId);
         showSyncStatus('', false);
 
         const { geminiKey } = getSettings();
         if (geminiKey) {
           const rescanAll = await uiConfirm(
-            'Klicke OK, um Bilder ohne Gemini-Beschreibung jetzt automatisch mit Gemini zu verschlagworten (mit 2 Sek. Pause zwischen Bildern).',
-            'Gemini KI-Analyse starten',
-            'Analysieren'
+            'Klicke OK, um Bilder ohne Gemini-Beschreibung jetzt automatisch mit Gemini anzureichern (mit 2 Sek. Pause zwischen Bildern).',
+            'Gemini KI-Anreicherung starten',
+            'Anreichern'
           );
           if (!rescanAll) { renderMainView(); return; }
 
-          const targets = images.filter((it) => !it.ai.description);
+          const targets = images.filter((it) => !(it.targetItem || it).ai || !(it.targetItem || it).ai.description);
           const list = targets.length > 0 ? targets : images;
           for (let i = 0; i < list.length; i++) {
             const item = list[i];
+            const target = item.targetItem || item;
+            const targetFId = item.targetFolderId || folderId;
             const src = item.localDataUrl || (item.driveFileId && state.mode === 'drive' ? await DriveAdapter.fetchBlobUrl(item.driveFileId) : '');
             if (!src) continue;
-            showSyncStatus(`Gemini analysiert Bild ${i + 1} von ${list.length}…`, true);
+            showSyncStatus(`Gemini reichert Bild ${i + 1} von ${list.length} an…`, true);
             try {
               const gRes = await analyzeImageWithGemini(src, geminiKey);
               if (gRes) {
-                applyGeminiResultToItem(item, gRes, false);
-                scheduleBoardSave(folderId);
+                applyGeminiResultToItem(target, gRes, false);
+                scheduleBoardSave(targetFId);
               }
             } catch (err) {
               console.warn('Gemini Fehler:', err);
-              await uiAlert('Gemini-Analyse abgebrochen: ' + err.message, 'Fehler');
+              await uiAlert('Gemini-Anreicherung abgebrochen: ' + err.message, 'Fehler');
               break;
             }
             if (i < list.length - 1) await new Promise((r) => setTimeout(r, 2000));
           }
-          showSyncStatus('Gemini-Bildanalyse abgeschlossen!', true);
+          showSyncStatus('KI-Anreicherung abgeschlossen!', true);
           setTimeout(() => showSyncStatus('', false), 2200);
           renderMainView();
           return;
@@ -329,6 +334,9 @@
           } else if (msg.type === 'result') {
             const item = images.find((x) => x.id === msg.id);
             if (item) {
+              const target = item.targetItem || item;
+              const targetFId = item.targetFolderId || folderId;
+              if (!target.ai) target.ai = { colors: [], colorNames: [], labels: [] };
               const sorted = (msg.res || []).slice().sort((a, b) => b.score - a.score);
               const bestScore = sorted[0] ? sorted[0].score : 0;
               const picked = sorted
@@ -336,11 +344,11 @@
                 .slice(0, 2)
                 .map((r) => enToDe[r.label] || r.label);
 
-              const prevAiLabels = new Set(item.ai.labels || []);
-              const manualTags = (item.tags || []).filter((t) => !prevAiLabels.has(t));
-              item.ai.labels = Array.from(new Set(picked));
-              item.tags = Array.from(new Set([...manualTags, ...item.ai.labels]));
-              scheduleBoardSave(folderId);
+              const prevAiLabels = new Set(target.ai.labels || []);
+              const manualTags = (target.tags || []).filter((t) => !prevAiLabels.has(t));
+              target.ai.labels = Array.from(new Set(picked));
+              target.tags = Array.from(new Set([...manualTags, ...target.ai.labels]));
+              scheduleBoardSave(targetFId);
             }
           } else if (msg.type === 'error') {
             console.warn('CLIP Worker Fehler:', msg.error);
