@@ -77,48 +77,70 @@
         container.innerHTML = `
           <div id="canvasViewWrap" class="canvas-view-wrap ${state.canvasFullscreen ? 'fullscreen' : ''}">
           <div class="canvas-toolbar">
-            <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-              <button id="canvasFullscreenBtn" class="btn btn-sm ${state.canvasFullscreen ? 'btn-primary' : ''}" type="button" title="Moodboard auf ganzes Browserfenster vergrößern">
-                ${state.canvasFullscreen ? '✕ Vollbild beenden' : '⛶ Vollbild'}
-              </button>
-              <button id="canvasZoomOutBtn" class="btn btn-sm" type="button" title="Verkleinern">－</button>
-              <span id="canvasZoomLabel" style="font-size:0.8rem; min-width:44px; text-align:center;">${Math.round(state.canvasZoom * 100)} %</span>
-              <button id="canvasZoomInBtn" class="btn btn-sm" type="button" title="Vergrößern">＋</button>
-              <button id="canvasResetViewBtn" class="btn btn-sm" type="button">100 %</button>
-
-              <button id="canvasFitBtn" class="btn btn-sm ${fitMode === 'contain' ? 'btn-oak' : ''}" type="button" title="Zwischen ganzem Bild und zugeschnittenem Kachel-Fill wechseln">
-                ${fitMode === 'contain' ? '🖼️ Ganzes Bild' : '✂️ Ausfüllen'}
-              </button>
-
-              <select id="canvasRatioSelect" class="form-control" style="width:auto; padding:4px 8px; font-size:0.78rem; border-radius:var(--radius-pill);" title="Kachel-Format auf Auswahl (oder alle) anwenden">
-                <option value="">📐 Format anwenden…</option>
-                <option value="original">Original-Proportion</option>
-                <option value="1:1">Quadrat (1:1)</option>
-                <option value="4:3">Querformat (4:3)</option>
-                <option value="3:4">Hochformat (3:4)</option>
-              </select>
-
-              <button id="canvasAutoLayoutBtn" class="btn btn-sm" type="button" title="Richtet Kacheln am Raster aus und behält deine Reihenfolge bei">🧲 Am Raster ausrichten</button>
-              <button id="canvasLayerUpBtn" class="btn btn-sm" type="button" title="Auswahl nach vorne">⬆️</button>
-              <button id="canvasLayerDownBtn" class="btn btn-sm" type="button" title="Auswahl nach hinten">⬇️</button>
-
-              <select id="canvasBgSelect" class="form-control" style="width:auto; padding:4px 8px; font-size:0.78rem; border-radius:var(--radius-pill);" title="Canvas-Hintergrund">
-                <option value="default" ${bgMode === 'default' ? 'selected' : ''}>Hintergrund: Standard</option>
-                <option value="white" ${bgMode === 'white' ? 'selected' : ''}>Hintergrund: Weiß</option>
-                <option value="dark" ${bgMode === 'dark' ? 'selected' : ''}>Hintergrund: Dunkel</option>
-              </select>
-              <button id="canvasGridBtn" class="btn btn-sm ${showGrid ? '' : 'btn-oak'}" type="button" title="Punktraster ein/aus">${showGrid ? 'Raster: An' : 'Raster: Aus'}</button>
-
-              <button id="canvasLockBtn" class="btn btn-sm ${state.canvasLocked ? 'btn-oak' : ''}" type="button">
+            <div class="canvas-toolbar-group">
+              <button id="canvasAddImageBtn" class="btn btn-oak btn-sm" type="button">＋ Bild</button>
+              <button id="canvasAddBookmarkBtn" class="btn btn-sm" type="button">＋ Bookmark</button>
+              <button id="canvasAutoLayoutBtn" class="btn btn-sm" type="button" title="Richtet Kacheln am Raster aus und behält deine Reihenfolge bei">🧲 Ausrichten</button>
+              <button id="canvasLockBtn" class="btn btn-sm ${state.canvasLocked ? 'btn-oak' : ''}" type="button" title="Verschieben sperren/entsperren">
                 ${state.canvasLocked ? '🔒 Gesperrt' : '🔓 Frei'}
               </button>
-              <button id="canvasSplitBtn" class="btn btn-sm ${state.canvasSplitOpen ? 'btn-primary' : ''}" type="button">
-                📋 Planung
-              </button>
-              <button id="canvasAddBookmarkBtn" class="btn btn-sm" type="button" title="Neues Bookmark direkt aufs Moodboard">🔗 ＋</button>
+
+              <div class="pill-group" style="padding:2px;">
+                <button id="canvasZoomOutBtn" class="pill-btn" type="button" title="Verkleinern">－</button>
+                <span id="canvasZoomLabel" style="font-size:0.76rem; padding:0 6px; display:inline-flex; align-items:center;">${Math.round(state.canvasZoom * 100)} %</span>
+                <button id="canvasZoomInBtn" class="pill-btn" type="button" title="Vergrößern">＋</button>
+              </div>
+
+              <div class="canvas-options-wrap">
+                <button id="canvasOptionsBtn" class="btn btn-sm" type="button">⚙️ Optionen ▾</button>
+                <div id="canvasOptionsPopover" class="canvas-options-popover hidden">
+                  <div>
+                    <div style="font-size:0.74rem; font-weight:600; color:var(--text-muted); margin-bottom:4px;">Bilddarstellung</div>
+                    <button id="canvasFitBtn" class="btn btn-sm ${fitMode === 'contain' ? 'btn-oak' : ''}" type="button" style="width:100%;">
+                      ${fitMode === 'contain' ? '🖼️ Ganzes Bild aktiv' : '✂️ Kachel ausfüllen aktiv'}
+                    </button>
+                  </div>
+                  <div>
+                    <div style="font-size:0.74rem; font-weight:600; color:var(--text-muted); margin-bottom:4px;">Format (Auswahl oder alle)</div>
+                    <select id="canvasRatioSelect" class="form-control" style="padding:5px 8px; font-size:0.8rem;">
+                      <option value="">Format wählen…</option>
+                      <option value="original">Original-Proportion</option>
+                      <option value="1:1">Quadrat (1:1)</option>
+                      <option value="4:3">Querformat (4:3)</option>
+                      <option value="3:4">Hochformat (3:4)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <div style="font-size:0.74rem; font-weight:600; color:var(--text-muted); margin-bottom:4px;">Ebenen (Auswahl)</div>
+                    <div style="display:flex; gap:6px;">
+                      <button id="canvasLayerUpBtn" class="btn btn-sm" type="button" style="flex:1;">⬆️ Vorne</button>
+                      <button id="canvasLayerDownBtn" class="btn btn-sm" type="button" style="flex:1;">⬇️ Hinten</button>
+                    </div>
+                  </div>
+                  <div>
+                    <div style="font-size:0.74rem; font-weight:600; color:var(--text-muted); margin-bottom:4px;">Hintergrund &amp; Raster</div>
+                    <select id="canvasBgSelect" class="form-control" style="padding:5px 8px; font-size:0.8rem; margin-bottom:6px;">
+                      <option value="default" ${bgMode === 'default' ? 'selected' : ''}>Standard</option>
+                      <option value="white" ${bgMode === 'white' ? 'selected' : ''}>Weiß</option>
+                      <option value="dark" ${bgMode === 'dark' ? 'selected' : ''}>Dunkel</option>
+                    </select>
+                    <div style="display:flex; gap:6px;">
+                      <button id="canvasGridBtn" class="btn btn-sm ${showGrid ? '' : 'btn-oak'}" type="button" style="flex:1;">${showGrid ? 'Raster: An' : 'Raster: Aus'}</button>
+                      <button id="canvasResetViewBtn" class="btn btn-sm" type="button" style="flex:1;">100 %</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div id="canvasPaletteBar" class="canvas-palette-bar">
-              <span style="font-size:0.76rem; color:var(--text-muted);">Farbpalette lädt…</span>
+
+            <div class="canvas-toolbar-group">
+              <div id="canvasPaletteBar" class="canvas-palette-bar">
+                <span style="font-size:0.76rem; color:var(--text-muted);">Farben…</span>
+              </div>
+              <button id="canvasSplitBtn" class="btn btn-sm ${state.canvasSplitOpen ? 'btn-primary' : ''}" type="button">📋 Planung</button>
+              <button id="canvasFullscreenBtn" class="btn btn-sm ${state.canvasFullscreen ? 'btn-primary' : ''}" type="button" title="Moodboard auf ganzes Browserfenster vergrößern">
+                ${state.canvasFullscreen ? '✕ Vollbild' : '⛶ Vollbild'}
+              </button>
             </div>
           </div>
 
@@ -340,7 +362,20 @@
           state.canvasSplitOpen = !state.canvasSplitOpen;
           renderCanvasView(container, statsEl, folderId);
         });
+        document.getElementById('canvasAddImageBtn').addEventListener('click', () => {
+          document.getElementById('fileUploadInput').click();
+        });
         document.getElementById('canvasAddBookmarkBtn').addEventListener('click', () => openItemModal(null));
+
+        const optBtn = document.getElementById('canvasOptionsBtn');
+        const optPop = document.getElementById('canvasOptionsPopover');
+        optBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          optPop.classList.toggle('hidden');
+        });
+        optPop.addEventListener('click', (e) => e.stopPropagation());
+        document.addEventListener('click', () => optPop.classList.add('hidden'), { once: true });
+
         if (state.canvasSplitOpen) {
           const splitEl = document.getElementById('canvasSplitPanel');
           if (splitEl) renderSplitPlanningPanel(splitEl, folderId);
