@@ -55,13 +55,55 @@
         });
       }
 
+      function getCanvasUndoStack(folderId) {
+        if (!state.canvasUndoStacks) state.canvasUndoStacks = {};
+        if (!state.canvasUndoStacks[folderId]) state.canvasUndoStacks[folderId] = [];
+        return state.canvasUndoStacks[folderId];
+      }
+
+      function pushCanvasUndo(folderId) {
+        const content = state.folderContents[folderId];
+        if (!content) return;
+        const stack = getCanvasUndoStack(folderId);
+        stack.push({
+          items: (content.board.items || []).map((it) => ({
+            id: it.id,
+            canvasHidden: !!it.canvasHidden,
+            canvas: it.canvas ? JSON.parse(JSON.stringify(it.canvas)) : null
+          })),
+          canvasElements: JSON.parse(JSON.stringify(content.board.canvasElements || []))
+        });
+        if (stack.length > 25) stack.shift();
+      }
+
+      function undoCanvasAction(folderId) {
+        const stack = getCanvasUndoStack(folderId);
+        const content = state.folderContents[folderId];
+        if (!content || stack.length === 0) return false;
+        const snap = stack.pop();
+        const snapMap = new Map(snap.items.map((x) => [x.id, x]));
+        for (const it of (content.board.items || [])) {
+          const s = snapMap.get(it.id);
+          if (s) {
+            it.canvasHidden = s.canvasHidden;
+            it.canvas = s.canvas;
+          }
+        }
+        content.board.canvasElements = snap.canvasElements;
+        state.selectedCanvasIds.clear();
+        scheduleBoardSave(folderId);
+        return true;
+      }
+
       function renderCanvasView(container, statsEl, folderId) {
         const oldVp = document.getElementById('canvasViewport');
         const savedVpScroll = oldVp ? { left: oldVp.scrollLeft, top: oldVp.scrollTop } : null;
         const savedWinY = window.scrollY;
         const content = state.folderContents[folderId];
         if (!Array.isArray(content.board.canvasElements)) content.board.canvasElements = [];
-        const visualItems = (content.board.items || []).filter((it) => !it.canvasHidden);
+        const allItems = content.board.items || [];
+        const visualItems = allItems.filter((it) => !it.canvasHidden);
+        const hiddenItems = allItems.filter((it) => !!it.canvasHidden);
         const canvasElements = content.board.canvasElements;
         statsEl.textContent = `${visualItems.length} Elemente · ${canvasElements.length} Gestaltungselemente`;
 
@@ -76,22 +118,7 @@
           }
         });
         if (changed) scheduleBoardSave(folderId);
-
-        if (visualItems.length === 0 && canvasElements.length === 0) {
-          container.innerHTML = `
-            <div class="phase-placeholder">
-              <h3 style="margin-top:0; color:var(--text-primary);">Noch keine Bilder auf diesem Moodboard</h3>
-              <p>Lade über „＋ Bild“ Fotos hoch, binde sie über „📦 Aus Inventory“ ein oder füge Text &amp; Farbpaletten hinzu.</p>
-              <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:12px;">
-                <button id="emptyCanvasInvBtn" class="btn btn-oak btn-sm" type="button">📦 Aus Inventory</button>
-                <button id="emptyCanvasImgBtn" class="btn btn-sm" type="button">＋ Bild</button>
-              </div>
-            </div>
-          `;
-          document.getElementById('emptyCanvasInvBtn').addEventListener('click', () => openInventoryPickerModal(folderId));
-          document.getElementById('emptyCanvasImgBtn').addEventListener('click', () => document.getElementById('fileUploadInput').click());
-          return;
-        }
+        const undoCount = getCanvasUndoStack(folderId).length;
 
         const cs = content.board.canvasSettings || {};
         const fitMode = cs.fitMode || state.canvasFitMode;
@@ -126,9 +153,11 @@
                   <button id="canvasAddFromInvBtn" class="tree-menu-item" type="button">📦 Aus Inventory</button>
                   <button id="canvasAddTextBtn" class="tree-menu-item" type="button">🔤 Text / Badge</button>
                   <button id="canvasAddPaletteBtn" class="tree-menu-item" type="button">🎨 Farbpalette</button>
+                  <button id="canvasShowAllHiddenBtn" class="tree-menu-item" type="button" ${hiddenItems.length === 0 ? 'disabled style="opacity:0.45;"' : ''}>👁️ Alle Projekt-Elemente (${hiddenItems.length})</button>
                 </div>
               </div>
 
+              <button id="canvasUndoBtn" class="btn btn-sm" type="button" ${undoCount === 0 ? 'disabled' : ''} title="Letzte Änderung rückgängig machen (Strg+Z)">↩️</button>
               <button id="canvasLockBtn" class="btn btn-sm ${state.canvasLocked ? 'btn-oak' : ''}" type="button" title="Verschieben sperren/entsperren">
                 ${state.canvasLocked ? '🔒 Gesperrt' : '🔓 Frei'}
               </button>
@@ -246,6 +275,17 @@
           <div class="canvas-split-layout ${state.canvasSplitOpen ? 'with-split' : ''}">
             <div id="canvasViewport" class="canvas-viewport ${showGrid ? '' : 'no-grid'} ${collageMode ? 'collage-mode' : ''} ${!bgColor && bgMode === 'white' ? 'bg-white' : (!bgColor && bgMode === 'dark' ? 'bg-dark' : '')}" style="${bgColor ? `background-color:${escapeHtml(bgColor)};` : ''}">
               <div id="canvasStage" class="canvas-stage" style="width:${Math.round(maxRight * state.canvasZoom)}px; height:${Math.round(maxBottom * state.canvasZoom)}px; transform: scale(${state.canvasZoom});">
+                ${(visualItems.length === 0 && canvasElements.length === 0) ? `
+                  <div class="phase-placeholder" style="position:absolute; left:40px; top:40px; max-width:520px; z-index:5;">
+                    <h3 style="margin-top:0; color:var(--text-primary);">Dieses Moodboard ist aktuell leer</h3>
+                    <p>Nutze oben <strong>＋ Hinzufügen</strong>, mache mit <strong>↩️</strong> den letzten Schritt rückgängig oder hole ausgeblendete Projekt-Elemente wieder aufs Board:</p>
+                    <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:12px;">
+                      ${hiddenItems.length > 0 ? `<button id="emptyCanvasRestoreAllBtn" class="btn btn-oak btn-sm" type="button">👁️ Alle ${hiddenItems.length} Projekt-Elemente einblenden</button>` : ''}
+                      <button id="emptyCanvasInvBtn" class="btn btn-sm" type="button">📦 Aus Inventory</button>
+                      <button id="emptyCanvasImgBtn" class="btn btn-sm" type="button">＋ Bild</button>
+                    </div>
+                  </div>
+                ` : ''}
                 ${visualItems.map((rawItem) => {
                   const item = resolveBoardItem(rawItem, folderId);
                   const c = rawItem.canvas;
@@ -612,6 +652,40 @@
           ];
         }
 
+        document.getElementById('canvasUndoBtn').addEventListener('click', () => {
+          if (undoCanvasAction(folderId)) renderCanvasView(container, statsEl, folderId);
+        });
+
+        function restoreAllHiddenToCanvas() {
+          if (hiddenItems.length === 0) return;
+          pushCanvasUndo(folderId);
+          allItems.forEach((it) => { it.canvasHidden = false; });
+          scheduleBoardSave(folderId);
+          renderCanvasView(container, statsEl, folderId);
+        }
+        const showAllHiddenBtn = document.getElementById('canvasShowAllHiddenBtn');
+        if (showAllHiddenBtn) showAllHiddenBtn.addEventListener('click', restoreAllHiddenToCanvas);
+        const emptyRestoreBtn = document.getElementById('emptyCanvasRestoreAllBtn');
+        if (emptyRestoreBtn) emptyRestoreBtn.addEventListener('click', restoreAllHiddenToCanvas);
+        const emptyInvBtn = document.getElementById('emptyCanvasInvBtn');
+        if (emptyInvBtn) emptyInvBtn.addEventListener('click', () => openInventoryPickerModal(folderId));
+        const emptyImgBtn = document.getElementById('emptyCanvasImgBtn');
+        if (emptyImgBtn) emptyImgBtn.addEventListener('click', () => document.getElementById('fileUploadInput').click());
+
+        if (!window._canvasUndoKeyBound) {
+          window._canvasUndoKeyBound = true;
+          document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z' && state.activeView === 'canvas' && !state.quickView) {
+              const tag = document.activeElement ? document.activeElement.tagName : '';
+              if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+              if (state.activeFolderId && undoCanvasAction(state.activeFolderId)) {
+                e.preventDefault();
+                renderMainView();
+              }
+            }
+          });
+        }
+
         document.getElementById('canvasSelectAllBtn').addEventListener('click', () => {
           state.selectedCanvasIds = new Set(getAllBoxEntries().map((e) => e.obj.id));
           renderCanvasView(container, statsEl, folderId);
@@ -811,6 +885,7 @@
 
         const selRemoveBtn = document.getElementById('selRemoveCanvasBtn');
         if (selRemoveBtn) selRemoveBtn.addEventListener('click', () => {
+          pushCanvasUndo(folderId);
           visualItems.forEach((it) => { if (state.selectedCanvasIds.has(it.id)) it.canvasHidden = true; });
           content.board.canvasElements = canvasElements.filter((el) => !state.selectedCanvasIds.has(el.id));
           state.selectedCanvasIds.clear();
@@ -820,6 +895,7 @@
 
         function stepLayerOrder(dir) {
           if (state.selectedCanvasIds.size === 0) return;
+          pushCanvasUndo(folderId);
           const sorted = getAllBoxEntries().sort((a, b) => (a.box.z || 1) - (b.box.z || 1));
           sorted.forEach((e, idx) => { e.box.z = idx + 1; });
           if (dir > 0) {
@@ -1040,6 +1116,7 @@
             itemEl,
             aspectRatio,
             selectionChanged,
+            undoPushed: true,
             startX: e.clientX,
             startY: e.clientY,
             origX: box.x,
@@ -1047,6 +1124,7 @@
             origW: box.w,
             origH: box.h
           };
+          pushCanvasUndo(folderId);
           viewport.setPointerCapture(e.pointerId);
         });
 
@@ -1084,6 +1162,7 @@
         viewport.addEventListener('pointerup', () => {
           if (activeAction && (activeAction.type === 'drag' || activeAction.type === 'resize')) {
             if (activeAction.moved) scheduleBoardSave(folderId);
+            else if (activeAction.undoPushed) getCanvasUndoStack(folderId).pop();
             if (activeAction.selectionChanged) renderCanvasView(container, statsEl, folderId);
           }
           activeAction = null;
