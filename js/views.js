@@ -2082,7 +2082,9 @@
           }
         }
 
-        const movedItem = { ...item, id: uid(item.type === 'image' ? 'img' : 'bm') };
+        const movedItem = createRefInSource
+          ? { ...item, id: uid(item.type === 'image' ? 'img' : 'bm') }
+          : { ...item };
         if (createRefInSource) {
           delete movedItem.canvas;
           delete movedItem.canvasHidden;
@@ -2103,6 +2105,27 @@
             };
           } else {
             sourceFc.board.items.splice(idx, 1);
+          }
+        }
+
+        // Falls ein Inventory-Element verschoben wurde, bestehende Projekt-Verknüpfungen aktualisieren
+        if (!createRefInSource && isInventoryFolder(sourceFolderId)) {
+          const projIds = state.folders.filter((f) => !isInventoryFolder(f.id)).map((f) => f.id);
+          await ensureFoldersLoaded(projIds);
+          for (const pId of projIds) {
+            const pFc = state.folderContents[pId];
+            if (!pFc) continue;
+            let changed = false;
+            for (const it of (pFc.board.items || [])) {
+              if (it.type === 'ref' && it.refItemId === movedItem.id && it.refFolderId !== targetFolderId) {
+                it.refFolderId = targetFolderId;
+                changed = true;
+              }
+            }
+            if (changed) {
+              if (state.mode === 'drive') await saveBoardNow(pId, true);
+              else scheduleBoardSave(pId);
+            }
           }
         }
       }
