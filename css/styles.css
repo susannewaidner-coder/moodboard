@@ -1310,12 +1310,40 @@
       position: absolute;
       bottom: 8px;
       right: 8px;
-      padding: 3px 8px;
+      padding: 3px 9px;
       border-radius: var(--radius-pill);
       background-color: var(--accent-fir);
       color: #FFFFFF;
       font-size: 0.72rem;
       font-weight: 600;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+    }
+
+    .price-badge.status-idea {
+      background-color: #B08658;
+    }
+
+    .price-badge.status-ordered {
+      background-color: #3E6D8C;
+    }
+
+    .price-badge.status-bought {
+      background-color: #2E4A3E;
+    }
+
+    .item-card.shop-idea {
+      border-color: rgba(197, 155, 109, 0.65);
+      box-shadow: inset 0 -3px 0 #C59B6D, var(--shadow-sm);
+    }
+
+    .item-card.shop-ordered {
+      border-color: rgba(62, 109, 140, 0.7);
+      box-shadow: inset 0 -3px 0 #3E6D8C, var(--shadow-sm);
+    }
+
+    .item-card.shop-bought {
+      border-color: rgba(46, 74, 62, 0.75);
+      box-shadow: inset 0 -3px 0 #2E4A3E, var(--shadow-sm);
     }
 
     .canvas-split-layout {
