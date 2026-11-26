@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>Moodboard &amp; Projekt-Planer — Google Drive</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <link rel="stylesheet" href="css/styles.css?v=1.0.19" />
+  <link rel="stylesheet" href="css/styles.css?v=1.0.20" />
 </head>
 </head>
 <body>
@@ -366,9 +366,14 @@
         Importiere eine aus Raindrop.io exportierte <code>.csv</code>-Datei direkt in den aktuell geöffneten Ordner.
       </p>
       <div class="form-group">
-        <label class="form-label" for="raindropCsvInput">CSV-Datei auswählen</label>
+        <label class="form-label" for="raindropCsvInput">CSV-Datei auswählen (z. B. <code>export.csv</code>)</label>
         <input id="raindropCsvInput" class="form-control" type="file" accept=".csv,text/csv" />
         <div id="raindropCsvSummary" class="form-hint">Noch keine Datei ausgewählt.</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="raindropZipImagesInput">Optional: Lokale Bilder aus Raindrop-ZIP auswählen</label>
+        <input id="raindropZipImagesInput" class="form-control" type="file" accept="image/*" multiple />
+        <div id="raindropZipImagesSummary" class="form-hint">Optional: Alle entpackten Bilder aus dem Raindrop-ZIP-Ordner markieren – werden automatisch zugeordnet und in Drive gespeichert.</div>
       </div>
       <div class="form-group" style="display:flex; flex-direction:column; gap:8px; font-size:0.84rem;">
         <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
@@ -406,9 +411,9 @@
     </div>
   </div>
 
-  <script defer src="js/core.js?v=1.0.19"></script>
-  <script defer src="js/views.js?v=1.0.19"></script>
-  <script defer src="js/canvas-home.js?v=1.0.19"></script>
-  <script defer src="js/ai-pdf.js?v=1.0.19"></script>
+  <script defer src="js/core.js?v=1.0.20"></script>
+  <script defer src="js/views.js?v=1.0.20"></script>
+  <script defer src="js/canvas-home.js?v=1.0.20"></script>
+  <script defer src="js/ai-pdf.js?v=1.0.20"></script>
 </body>
 </html>
