@@ -91,18 +91,32 @@
             menu.className = 'tree-menu-popover';
             menu.style.top = `${Math.min(window.innerHeight - 100, rect.bottom + 4)}px`;
             menu.style.left = `${Math.min(window.innerWidth - 185, rect.left)}px`;
+            const isInvRoot = fId === state.inventoryRootId;
             menu.innerHTML = `
               <button class="tree-menu-item" data-menu-action="sub" type="button">＋ Unterordner anlegen</button>
-              <button class="tree-menu-item" data-menu-action="rename" type="button">✎ Umbenennen</button>
+              ${!isInvRoot ? '<button class="tree-menu-item" data-menu-action="rename" type="button">✎ Umbenennen</button>' : ''}
+              ${!isInvRoot ? '<button class="tree-menu-item" data-menu-action="move" type="button">↗️ Verschieben</button>' : ''}
+              ${!isInvRoot ? '<button class="tree-menu-item" data-menu-action="delete" type="button" style="color:var(--danger);">🗑 Löschen</button>' : ''}
             `;
             menu.addEventListener('click', (ev) => ev.stopPropagation());
             menu.querySelector('[data-menu-action="sub"]').addEventListener('click', () => {
               closeFolderMenu();
               promptCreateFolder(fId);
             });
-            menu.querySelector('[data-menu-action="rename"]').addEventListener('click', () => {
+            const renBtn = menu.querySelector('[data-menu-action="rename"]');
+            if (renBtn) renBtn.addEventListener('click', () => {
               closeFolderMenu();
               promptRenameFolder(fId);
+            });
+            const movBtn = menu.querySelector('[data-menu-action="move"]');
+            if (movBtn) movBtn.addEventListener('click', () => {
+              closeFolderMenu();
+              promptMoveFolder(fId);
+            });
+            const delBtn = menu.querySelector('[data-menu-action="delete"]');
+            if (delBtn) delBtn.addEventListener('click', () => {
+              closeFolderMenu();
+              promptDeleteFolder(fId);
             });
             document.body.appendChild(menu);
             document.addEventListener('click', closeFolderMenu, { once: true });
@@ -168,6 +182,126 @@
           folder.name = nextName;
           renderSidebar();
           renderMainView();
+        } catch (err) {
+          await uiAlert(err.message, 'Fehler');
+        } finally {
+          showSyncStatus('', false);
+        }
+      }
+
+      let pendingFolderSelectCb = null;
+      function openFolderSelectModal({ title, desc, options, confirmText = 'Übernehmen', onConfirm }) {
+        document.getElementById('folderSelectTitle').textContent = title;
+        document.getElementById('folderSelectDesc').textContent = desc || '';
+        const dd = document.getElementById('folderSelectDropdown');
+        dd.innerHTML = options.map((o) => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join('');
+        document.getElementById('folderSelectConfirmBtn').textContent = confirmText;
+        pendingFolderSelectCb = onConfirm;
+        openModal('folderSelectModal');
+      }
+      document.getElementById('folderSelectConfirmBtn').addEventListener('click', async () => {
+        const val = document.getElementById('folderSelectDropdown').value;
+        const cb = pendingFolderSelectCb;
+        pendingFolderSelectCb = null;
+        closeModal('folderSelectModal');
+        if (cb && val) await cb(val);
+      });
+
+      function buildFolderOptionList(excludeIds = new Set(), includeRoot = true) {
+        const opts = [];
+        if (includeRoot && state.rootFolderId && !excludeIds.has(state.rootFolderId)) {
+          opts.push({ value: state.rootFolderId, label: '📁 Moodboards (Hauptebene)' });
+        }
+        function walk(parentId, prefix = '') {
+          const children = state.folders.filter((f) => (f.parents || []).includes(parentId) && !excludeIds.has(f.id));
+          for (const ch of children) {
+            const icon = isInventoryFolder(ch.id) ? '📦' : '📁';
+            const labelName = ch.name === '_Inventory' ? 'Inventory' : ch.name;
+            opts.push({ value: ch.id, label: `${prefix}${icon} ${labelName}` });
+            walk(ch.id, prefix + '  ↳ ');
+          }
+        }
+        if (state.rootFolderId) walk(state.rootFolderId, '');
+        return opts;
+      }
+
+      function promptMoveFolder(folderId) {
+        const folder = state.folders.find((f) => f.id === folderId);
+        if (!folder || folderId === state.inventoryRootId) return;
+        const subtree = new Set(getSubtreeFolderIds(folderId));
+        const options = buildFolderOptionList(subtree, true);
+        if (options.length === 0) {
+          uiAlert('Kein gültiger Zielordner verfügbar.');
+          return;
+        }
+        openFolderSelectModal({
+          title: `Ordner „${folder.name}“ verschieben`,
+          desc: 'Wähle den neuen übergeordneten Ordner:',
+          options,
+          confirmText: 'Verschieben',
+          onConfirm: async (newParentId) => {
+            const oldParentId = (folder.parents || [])[0] || state.rootFolderId;
+            if (oldParentId === newParentId) return;
+            if (state.mode === 'demo') {
+              const demo = DemoAdapter.load();
+              const target = demo.folders.find((f) => f.id === folderId);
+              if (target) target.parents = [newParentId];
+              DemoAdapter.save(demo);
+              state.folders = demo.folders;
+              state.expandedFolders.add(newParentId);
+              renderSidebar();
+              renderMainView();
+              return;
+            }
+            showSyncStatus('Verschiebe Ordner in Drive…', true);
+            try {
+              await DriveAdapter.moveFile(folderId, oldParentId, newParentId);
+              folder.parents = [newParentId];
+              state.expandedFolders.add(newParentId);
+              renderSidebar();
+              renderMainView();
+            } catch (err) {
+              await uiAlert(err.message, 'Fehler');
+            } finally {
+              showSyncStatus('', false);
+            }
+          }
+        });
+      }
+
+      async function promptDeleteFolder(folderId) {
+        const folder = state.folders.find((f) => f.id === folderId);
+        if (!folder || folderId === state.inventoryRootId) return;
+        if (!(await uiConfirm(`Ordner „${folder.name}“ inkl. aller Unterordner und Inhalte wirklich löschen?`, 'Ordner löschen', 'Löschen'))) return;
+        const subtree = new Set(getSubtreeFolderIds(folderId));
+        if (state.mode === 'demo') {
+          const demo = DemoAdapter.load();
+          demo.folders = demo.folders.filter((f) => !subtree.has(f.id));
+          for (const id of subtree) {
+            delete demo.boards[id];
+            delete state.folderContents[id];
+          }
+          DemoAdapter.save(demo);
+          state.folders = demo.folders;
+          if (subtree.has(state.activeFolderId)) {
+            state.activeFolderId = state.folders[0]?.id || null;
+          }
+          renderSidebar();
+          if (state.activeFolderId) await openFolder(state.activeFolderId);
+          else renderMainView();
+          return;
+        }
+        showSyncStatus('Lösche Ordner in Google Drive…', true);
+        try {
+          await DriveAdapter.trashFile(folderId);
+          state.folders = state.folders.filter((f) => !subtree.has(f.id));
+          for (const id of subtree) delete state.folderContents[id];
+          if (subtree.has(state.activeFolderId)) {
+            state.activeFolderId = state.folders[0]?.id || null;
+          }
+          renderSidebar();
+          if (state.activeFolderId) await openFolder(state.activeFolderId);
+          else renderMainView();
         } catch (err) {
           await uiAlert(err.message, 'Fehler');
         } finally {
@@ -410,6 +544,7 @@
               </select>
 
               ${!isInvFolder ? '<button id="openInventoryPickerBtn" class="btn btn-oak btn-sm" type="button" title="Elemente aus dem Inventory hier einbinden">📦 Aus Inventory</button>' : ''}
+              <button id="toggleBulkSelectBtn" class="btn btn-sm ${state.gallerySelectMode ? 'btn-primary' : ''}" type="button" title="Mehrere Karten auswählen">☑️ Auswählen</button>
               <button id="manageTagsBtn" class="btn btn-sm" type="button" title="Tag-Liste verwalten">⚙️ Tags</button>
               <button id="manageLocationsBtn" class="btn btn-sm" type="button" title="Lagerorte verwalten">📍 Lagerorte</button>
               <button id="openRaindropImportBtn" class="btn btn-sm" type="button" title="Raindrop CSV in diesen Ordner importieren">📥 Import</button>
@@ -427,15 +562,68 @@
             ` : ''}
           </div>
 
+          ${state.selectedGalleryIds.size > 0 ? `
+            <div class="bulk-action-bar">
+              <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                <strong style="font-size:0.84rem;">${state.selectedGalleryIds.size} ausgewählt</strong>
+                <button id="bulkSelectAllBtn" class="btn btn-sm" type="button">Alle (${items.length})</button>
+                <button id="bulkClearBtn" class="btn btn-sm" type="button">Aufheben</button>
+              </div>
+              <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                ${!isInvFolder ? '<button id="bulkMoveToInvBtn" class="btn btn-oak btn-sm" type="button">📦 Ins Inventory</button>' : ''}
+                <button id="bulkMoveFolderBtn" class="btn btn-sm" type="button">📁 Verschieben</button>
+                <button id="bulkSetLocBtn" class="btn btn-sm" type="button">📍 Lagerort</button>
+                <button id="bulkToggleCanvasBtn" class="btn btn-sm" type="button">🎨 Moodboard an/aus</button>
+                <button id="bulkDeleteBtn" class="btn btn-sm" type="button" style="color:var(--danger); border-color:var(--danger);">🗑 Löschen</button>
+              </div>
+            </div>
+          ` : ''}
+
           <div id="galleryDropzone" class="dropzone">
             <strong>Bilder hier ablegen</strong> oder klicken zum Hochladen (Laptop &amp; Handy-Kamera)
           </div>
 
-          <div class="gallery-grid ${state.galleryMode === 'list' ? 'list-mode' : ''}">
+          <div class="gallery-grid ${state.galleryMode === 'list' ? 'list-mode' : ''} ${state.gallerySelectMode ? 'select-mode' : ''}">
             ${items.map((item) => renderItemCardHtml(item)).join('')}
             ${docs.map((df) => renderDriveDocCardHtml(df)).join('')}
           </div>
         `;
+
+        document.getElementById('toggleBulkSelectBtn').addEventListener('click', () => {
+          state.gallerySelectMode = !state.gallerySelectMode;
+          if (!state.gallerySelectMode) state.selectedGalleryIds.clear();
+          renderGalleryView(container, statsEl, folderId);
+        });
+
+        const bulkAll = document.getElementById('bulkSelectAllBtn');
+        if (bulkAll) bulkAll.addEventListener('click', () => {
+          items.forEach((it) => state.selectedGalleryIds.add(it.id));
+          renderGalleryView(container, statsEl, folderId);
+        });
+        const bulkClear = document.getElementById('bulkClearBtn');
+        if (bulkClear) bulkClear.addEventListener('click', () => {
+          state.selectedGalleryIds.clear();
+          renderGalleryView(container, statsEl, folderId);
+        });
+        const bulkMoveInv = document.getElementById('bulkMoveToInvBtn');
+        if (bulkMoveInv) bulkMoveInv.addEventListener('click', () => bulkMoveItemsToInventory(folderId));
+        const bulkMoveFolder = document.getElementById('bulkMoveFolderBtn');
+        if (bulkMoveFolder) bulkMoveFolder.addEventListener('click', () => bulkMoveItemsToFolder(folderId));
+        const bulkLoc = document.getElementById('bulkSetLocBtn');
+        if (bulkLoc) bulkLoc.addEventListener('click', () => bulkSetItemsLocation(folderId));
+        const bulkCanvas = document.getElementById('bulkToggleCanvasBtn');
+        if (bulkCanvas) bulkCanvas.addEventListener('click', () => {
+          const fc = state.folderContents[folderId];
+          if (!fc) return;
+          const targets = (fc.board.items || []).filter((it) => state.selectedGalleryIds.has(it.id));
+          const allHidden = targets.every((it) => it.canvasHidden);
+          targets.forEach((it) => { it.canvasHidden = !allHidden; });
+          scheduleBoardSave(folderId);
+          state.selectedGalleryIds.clear();
+          renderGalleryView(container, statsEl, folderId);
+        });
+        const bulkDel = document.getElementById('bulkDeleteBtn');
+        if (bulkDel) bulkDel.addEventListener('click', () => bulkDeleteItems(folderId));
 
         document.getElementById('manageTagsBtn').addEventListener('click', openTagsManagerModal);
         document.getElementById('manageLocationsBtn').addEventListener('click', openLocationsManagerModal);
@@ -546,7 +734,7 @@
         const thumbSrc = item.localDataUrl || item.previewImageUrl || '';
         const shop = item.shopping && item.shopping.enabled ? item.shopping : null;
         const shopStatus = (item.shopping && item.shopping.status) ? item.shopping.status : 'idea';
-        const shopLabels = { idea: '💡 Idee', ordered: '📦 Bestellt', bought: '✅ Gekauft' };
+        const shopLabels = { idea: '💡 Idee', ordered: '📦 Bestellt', bought: '✅ Vorhanden' };
         const shopCardClass = `shop-${shopStatus}`;
         const priceVal = shop ? Number(shop.price || 0) : 0;
         const badgeText = priceVal > 0
@@ -554,9 +742,11 @@
           : (shopLabels[shopStatus] || '💡 Idee');
         const linkUrl = item.url || item.sourceUrl || '';
 
+        const isBulkSel = state.selectedGalleryIds.has(item.id);
         return `
-          <article class="item-card ${shopCardClass}" data-item-id="${item.id}">
+          <article class="item-card ${shopCardClass} ${isBulkSel ? 'bulk-selected' : ''}" data-item-id="${item.id}">
             <div class="item-thumb" data-open-item="${item.id}">
+              <input type="checkbox" class="item-select-cb" data-select-item="${item.id}" ${isBulkSel ? 'checked' : ''} title="Auswählen" />
               ${thumbSrc
                 ? `<img src="${escapeHtml(thumbSrc)}" alt="${escapeHtml(item.title)}" data-drive-img="${item.driveFileId || ''}" />`
                 : (item.driveFileId
@@ -628,9 +818,25 @@
           }
         });
 
+        container.querySelectorAll('[data-select-item]').forEach((cb) => {
+          cb.addEventListener('click', (e) => e.stopPropagation());
+          cb.addEventListener('change', () => {
+            const id = cb.getAttribute('data-select-item');
+            if (cb.checked) state.selectedGalleryIds.add(id);
+            else state.selectedGalleryIds.delete(id);
+            renderMainView();
+          });
+        });
+
         container.querySelectorAll('[data-open-item]').forEach((el) => {
           el.addEventListener('click', () => {
             const id = el.getAttribute('data-open-item');
+            if (state.gallerySelectMode) {
+              if (state.selectedGalleryIds.has(id)) state.selectedGalleryIds.delete(id);
+              else state.selectedGalleryIds.add(id);
+              renderMainView();
+              return;
+            }
             const found = findItemWithFolder(id);
             if (!found) return;
             const item = resolveBoardItem(found.item, found.fId);
@@ -792,6 +998,7 @@
                 sourceUrl: '',
                 note: '',
                 tags: [],
+                shopping: { enabled: false, price: 0, quantity: 1, status: 'bought' },
                 ai: { ...aiColors, labels: [] }
               };
             } else {
@@ -805,6 +1012,7 @@
                 sourceUrl: '',
                 note: '',
                 tags: [],
+                shopping: { enabled: false, price: 0, quantity: 1, status: 'bought' },
                 ai: { ...aiColors, labels: [] }
               };
             }
@@ -876,7 +1084,7 @@
         }
         picker.innerHTML = allOptions.map((tag) => {
           const active = state.editingItemTags.has(tag);
-          return `<button type="button" class="pill-btn ${active ? 'active' : ''}" data-pick-tag="${escapeHtml(tag)}" style="border:1px solid ${active ? 'var(--accent-oak)' : 'var(--border-color)'};">#${escapeHtml(tag)}</button>`;
+          return `<button type="button" class="tag-pick-chip ${active ? 'active' : ''}" data-pick-tag="${escapeHtml(tag)}">${active ? '✓ ' : ''}#${escapeHtml(tag)}</button>`;
         }).join('');
         picker.querySelectorAll('[data-pick-tag]').forEach((btn) => {
           btn.addEventListener('click', () => {
@@ -1380,7 +1588,8 @@
             previewImageUrl: (!driveFileId && !localDataUrl) ? fallbackPreviewUrl : '',
             title,
             note,
-            tags: Array.from(new Set(finalTags))
+            tags: Array.from(new Set(finalTags)),
+            shopping: { enabled: false, price: 0, quantity: 1, status: 'bought' }
           });
           importedCount++;
         }
@@ -1647,8 +1856,13 @@
           const idx = sourceFc.board.items.findIndex((i) => i.id === item.id);
           if (idx >= 0) sourceFc.board.items[idx] = refItem;
 
-          scheduleBoardSave(targetInvId);
-          scheduleBoardSave(sourceFolderId);
+          if (state.mode === 'drive') {
+            await saveBoardNow(targetInvId, true);
+            await saveBoardNow(sourceFolderId, true);
+          } else {
+            scheduleBoardSave(targetInvId);
+            scheduleBoardSave(sourceFolderId);
+          }
           renderMainView();
           showSyncStatus('✅ Ins Inventory verschoben & verknüpft', true);
           setTimeout(() => showSyncStatus('', false), 2600);
@@ -1658,6 +1872,195 @@
           pendingMoveToInv = null;
         }
       });
+
+      async function moveRawItemBetweenFolders(item, sourceFolderId, targetFolderId, createRefInSource = false) {
+        await ensureFoldersLoaded([targetFolderId]);
+        const sourceFc = state.folderContents[sourceFolderId];
+        const targetFc = state.folderContents[targetFolderId];
+        if (!sourceFc || !targetFc || sourceFolderId === targetFolderId) return;
+
+        if (item.type === 'ref') {
+          if (createRefInSource) return;
+          const idx = sourceFc.board.items.findIndex((i) => i.id === item.id);
+          if (idx >= 0) {
+            sourceFc.board.items.splice(idx, 1);
+            targetFc.board.items.unshift(item);
+          }
+          return;
+        }
+
+        if (state.mode === 'drive' && item.driveFileId) {
+          await DriveAdapter.moveFile(item.driveFileId, sourceFolderId, targetFolderId);
+          const dfIdx = (sourceFc.driveFiles || []).findIndex((df) => df.id === item.driveFileId);
+          if (dfIdx >= 0) {
+            const [movedDf] = sourceFc.driveFiles.splice(dfIdx, 1);
+            targetFc.driveFiles.push(movedDf);
+          }
+        }
+
+        const movedItem = { ...item, id: uid(item.type === 'image' ? 'img' : 'bm') };
+        if (createRefInSource) {
+          delete movedItem.canvas;
+          delete movedItem.canvasHidden;
+        }
+        targetFc.board.items.unshift(movedItem);
+
+        const idx = sourceFc.board.items.findIndex((i) => i.id === item.id);
+        if (idx >= 0) {
+          if (createRefInSource) {
+            sourceFc.board.items[idx] = {
+              id: item.id,
+              type: 'ref',
+              refFolderId: targetFolderId,
+              refItemId: movedItem.id,
+              canvas: item.canvas,
+              canvasHidden: item.canvasHidden,
+              shopping: item.shopping || { enabled: false, price: 0, quantity: 1, status: 'bought' }
+            };
+          } else {
+            sourceFc.board.items.splice(idx, 1);
+          }
+        }
+      }
+
+      async function bulkMoveItemsToInventory(sourceFolderId) {
+        const invFolders = getInventoryFolders();
+        if (invFolders.length === 0) return;
+        const options = invFolders.map((f) => ({
+          value: f.id,
+          label: `📦 ${f.name === '_Inventory' ? 'Inventory (Hauptordner)' : f.name}`
+        }));
+        openFolderSelectModal({
+          title: `${state.selectedGalleryIds.size} Element(e) ins Inventory verschieben`,
+          desc: 'Die ausgewählten Elemente werden ins Inventory verschoben und bleiben hier als Verknüpfung erhalten.',
+          options,
+          confirmText: 'Verschieben & verknüpfen',
+          onConfirm: async (targetInvId) => {
+            const sourceFc = state.folderContents[sourceFolderId];
+            if (!sourceFc) return;
+            const targets = (sourceFc.board.items || []).filter((it) => state.selectedGalleryIds.has(it.id) && it.type !== 'ref');
+            if (targets.length === 0) {
+              await uiAlert('Die ausgewählten Elemente sind bereits Verknüpfungen.');
+              return;
+            }
+            showSyncStatus(`Verschiebe ${targets.length} Element(e) ins Inventory…`, true);
+            try {
+              for (const it of targets) {
+                await moveRawItemBetweenFolders(it, sourceFolderId, targetInvId, true);
+              }
+              if (state.mode === 'drive') {
+                await saveBoardNow(targetInvId, true);
+                await saveBoardNow(sourceFolderId, true);
+              } else {
+                scheduleBoardSave(targetInvId);
+                scheduleBoardSave(sourceFolderId);
+              }
+              state.selectedGalleryIds.clear();
+              state.gallerySelectMode = false;
+              renderMainView();
+              showSyncStatus(`✅ ${targets.length} Element(e) ins Inventory verschoben`, true);
+              setTimeout(() => showSyncStatus('', false), 2600);
+            } catch (err) {
+              await uiAlert('Fehler beim Verschieben: ' + err.message, 'Fehler');
+            }
+          }
+        });
+      }
+
+      async function bulkMoveItemsToFolder(sourceFolderId) {
+        const options = buildFolderOptionList(new Set([sourceFolderId]), false);
+        if (options.length === 0) {
+          await uiAlert('Kein anderer Zielordner vorhanden.');
+          return;
+        }
+        openFolderSelectModal({
+          title: `${state.selectedGalleryIds.size} Element(e) verschieben`,
+          desc: 'Wähle den Zielordner:',
+          options,
+          confirmText: 'Verschieben',
+          onConfirm: async (targetId) => {
+            const sourceFc = state.folderContents[sourceFolderId];
+            if (!sourceFc) return;
+            const targets = (sourceFc.board.items || []).filter((it) => state.selectedGalleryIds.has(it.id));
+            if (targets.length === 0) return;
+            showSyncStatus(`Verschiebe ${targets.length} Element(e)…`, true);
+            try {
+              for (const it of targets) {
+                await moveRawItemBetweenFolders(it, sourceFolderId, targetId, false);
+              }
+              if (state.mode === 'drive') {
+                await saveBoardNow(targetId, true);
+                await saveBoardNow(sourceFolderId, true);
+              } else {
+                scheduleBoardSave(targetId);
+                scheduleBoardSave(sourceFolderId);
+              }
+              state.selectedGalleryIds.clear();
+              state.gallerySelectMode = false;
+              renderMainView();
+              showSyncStatus(`✅ ${targets.length} Element(e) verschoben`, true);
+              setTimeout(() => showSyncStatus('', false), 2600);
+            } catch (err) {
+              await uiAlert('Fehler beim Verschieben: ' + err.message, 'Fehler');
+            }
+          }
+        });
+      }
+
+      function bulkSetItemsLocation(folderId) {
+        const options = [
+          { value: '__none__', label: '— Kein Lagerort —' },
+          ...state.globalLocations.map((l) => ({ value: l, label: `📍 ${l}` }))
+        ];
+        openFolderSelectModal({
+          title: `Lagerort für ${state.selectedGalleryIds.size} Element(e) setzen`,
+          desc: 'Wähle einen Lagerort aus deiner Liste:',
+          options,
+          confirmText: 'Zuweisen',
+          onConfirm: async (locVal) => {
+            const nextLoc = locVal === '__none__' ? '' : locVal;
+            const fc = state.folderContents[folderId];
+            if (!fc) return;
+            const touched = new Set([folderId]);
+            for (const raw of (fc.board.items || [])) {
+              if (!state.selectedGalleryIds.has(raw.id)) continue;
+              if (raw.type === 'ref') {
+                const res = resolveBoardItem(raw, folderId);
+                if (res && res.targetItem) {
+                  res.targetItem.location = nextLoc;
+                  touched.add(res.targetFolderId);
+                }
+              } else {
+                raw.location = nextLoc;
+              }
+            }
+            for (const fId of touched) scheduleBoardSave(fId);
+            state.selectedGalleryIds.clear();
+            state.gallerySelectMode = false;
+            renderMainView();
+          }
+        });
+      }
+
+      async function bulkDeleteItems(folderId) {
+        const fc = state.folderContents[folderId];
+        if (!fc) return;
+        const targets = (fc.board.items || []).filter((it) => state.selectedGalleryIds.has(it.id));
+        if (targets.length === 0) return;
+        if (!(await uiConfirm(`${targets.length} ausgewählte(s) Element(e) wirklich entfernen/löschen?`, 'Mehrfachauswahl löschen', 'Löschen'))) return;
+        fc.board.items = (fc.board.items || []).filter((it) => !state.selectedGalleryIds.has(it.id));
+        scheduleBoardSave(folderId);
+        if (state.mode === 'drive') {
+          for (const it of targets) {
+            if (it.type !== 'ref' && it.driveFileId) {
+              try { await DriveAdapter.trashFile(it.driveFileId); } catch (e) {}
+            }
+          }
+        }
+        state.selectedGalleryIds.clear();
+        state.gallerySelectMode = false;
+        renderMainView();
+      }
 
       document.getElementById('conflictReloadBtn').addEventListener('click', async () => {
         const fId = state.pendingConflict;
@@ -1958,7 +2361,7 @@
                 <div class="budget-stat-val">${planned.toFixed(2)} €</div>
               </div>
               <div class="budget-stat">
-                <div class="budget-stat-label">Ausgegeben (Gekauft)</div>
+                <div class="budget-stat-label">Ausgegeben (Vorhanden)</div>
                 <div class="budget-stat-val">${spent.toFixed(2)} €</div>
               </div>
               <div class="budget-stat">
@@ -1983,7 +2386,7 @@
                 <button class="pill-btn ${state.shopFilter === 'all' ? 'active' : ''}" data-sfilter="all" type="button">Alle</button>
                 <button class="pill-btn ${state.shopFilter === 'idea' ? 'active' : ''}" data-sfilter="idea" type="button">Idee</button>
                 <button class="pill-btn ${state.shopFilter === 'ordered' ? 'active' : ''}" data-sfilter="ordered" type="button">Bestellt</button>
-                <button class="pill-btn ${state.shopFilter === 'bought' ? 'active' : ''}" data-sfilter="bought" type="button">Gekauft</button>
+                <button class="pill-btn ${state.shopFilter === 'bought' ? 'active' : ''}" data-sfilter="bought" type="button">Vorhanden</button>
               </div>
             </div>
 
@@ -2014,7 +2417,7 @@
                   <select class="form-control" data-shop-field="status" style="width:94px; padding:4px 6px; font-size:0.8rem;">
                     <option value="idea" ${entry.status === 'idea' ? 'selected' : ''}>Idee</option>
                     <option value="ordered" ${entry.status === 'ordered' ? 'selected' : ''}>Bestellt</option>
-                    <option value="bought" ${entry.status === 'bought' ? 'selected' : ''}>Gekauft</option>
+                    <option value="bought" ${entry.status === 'bought' ? 'selected' : ''}>Vorhanden</option>
                   </select>
                   <button class="btn-icon" data-edit-shop="1" type="button" title="Titel &amp; Link bearbeiten">✎</button>
                   <button class="btn-icon" data-remove-shop="1" type="button" title="Von Einkaufsliste entfernen">✕</button>
