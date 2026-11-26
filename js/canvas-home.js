@@ -41,8 +41,8 @@
 
       function renderCanvasView(container, statsEl, folderId) {
         const content = state.folderContents[folderId];
-        const visualItems = (content.board.items || []).filter((it) => it.type === 'image' || it.previewImageUrl);
-        statsEl.textContent = `${visualItems.length} Bilder auf dem Canvas`;
+        const visualItems = (content.board.items || []).filter((it) => !it.canvasHidden);
+        statsEl.textContent = `${visualItems.length} Elemente auf dem Canvas`;
 
         // Initiale Positionen vergeben, falls noch keine Canvas-Koordinaten existieren
         let changed = false;
@@ -115,6 +115,7 @@
               <button id="canvasSplitBtn" class="btn btn-sm ${state.canvasSplitOpen ? 'btn-primary' : ''}" type="button">
                 📋 Planung
               </button>
+              <button id="canvasAddBookmarkBtn" class="btn btn-sm" type="button" title="Neues Bookmark direkt aufs Moodboard">🔗 ＋</button>
             </div>
             <div id="canvasPaletteBar" class="canvas-palette-bar">
               <span style="font-size:0.76rem; color:var(--text-muted);">Farbpalette lädt…</span>
@@ -128,11 +129,23 @@
                   const c = item.canvas;
                   const isSelected = state.selectedCanvasIds.has(item.id);
                   const src = item.localDataUrl || item.previewImageUrl || '';
+                  const hasVisual = !!(src || item.driveFileId);
+                  const linkUrl = item.url || item.sourceUrl || '';
+                  let domain = '';
+                  try { if (linkUrl) domain = new URL(linkUrl).hostname.replace(/^www\./, ''); } catch (e) {}
                   return `
                     <div class="canvas-item ${isSelected ? 'selected' : ''} ${fitMode === 'contain' ? 'fit-contain' : ''}"
                          data-canvas-id="${item.id}"
                          style="left:${c.x}px; top:${c.y}px; width:${c.w}px; height:${c.h}px; z-index:${c.z || 1};">
-                      <img src="${escapeHtml(src)}" alt="${escapeHtml(item.title)}" data-drive-img="${item.driveFileId || ''}" />
+                      ${hasVisual
+                        ? `<img src="${escapeHtml(src)}" alt="${escapeHtml(item.title)}" data-drive-img="${item.driveFileId || ''}" />`
+                        : `<div style="width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:12px; text-align:center; gap:6px; background:var(--card-bg);">
+                             <span style="font-size:1.8rem;">🔗</span>
+                             <strong style="font-size:0.82rem; color:var(--text-primary); display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;">${escapeHtml(item.title || 'Bookmark')}</strong>
+                             ${domain ? `<span style="font-size:0.7rem; color:var(--text-muted);">${escapeHtml(domain)}</span>` : ''}
+                           </div>`
+                      }
+                      ${linkUrl ? `<a href="${escapeHtml(linkUrl)}" target="_blank" rel="noopener" data-canvas-link="1" title="Link öffnen" style="position:absolute; top:6px; right:6px; width:24px; height:24px; border-radius:50%; background:rgba(26,28,27,0.72); color:#fff; display:flex; align-items:center; justify-content:center; font-size:0.78rem; text-decoration:none;">↗</a>` : ''}
                       <div class="canvas-item-label">${escapeHtml(item.title || 'Bild')}</div>
                       ${state.canvasLocked ? '' : '<div class="canvas-resize-handle" data-resize-handle="1"></div>'}
                     </div>
@@ -327,6 +340,7 @@
           state.canvasSplitOpen = !state.canvasSplitOpen;
           renderCanvasView(container, statsEl, folderId);
         });
+        document.getElementById('canvasAddBookmarkBtn').addEventListener('click', () => openItemModal(null));
         if (state.canvasSplitOpen) {
           const splitEl = document.getElementById('canvasSplitPanel');
           if (splitEl) renderSplitPlanningPanel(splitEl, folderId);
@@ -336,6 +350,7 @@
         let activeAction = null;
 
         viewport.addEventListener('pointerdown', (e) => {
+          if (e.target.closest('[data-canvas-link]')) return;
           const itemEl = e.target.closest('.canvas-item');
           if (!itemEl) {
             if (!e.shiftKey) {
