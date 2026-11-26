@@ -568,7 +568,7 @@
             <div class="bulk-action-bar">
               <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                 <strong style="font-size:0.84rem;">${state.selectedGalleryIds.size} ausgewählt</strong>
-                <button id="bulkSelectAllBtn" class="btn btn-sm" type="button">Alle (${items.length})</button>
+                <button id="bulkSelectAllBtn" class="btn btn-sm" type="button">Alle (${items.length + docs.length})</button>
                 <button id="bulkClearBtn" class="btn btn-sm" type="button">Aufheben</button>
               </div>
               <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
@@ -600,6 +600,7 @@
         const bulkAll = document.getElementById('bulkSelectAllBtn');
         if (bulkAll) bulkAll.addEventListener('click', () => {
           items.forEach((it) => state.selectedGalleryIds.add(it.id));
+          docs.forEach((df) => state.selectedGalleryIds.add('doc:' + df.id));
           renderGalleryView(container, statsEl, folderId);
         });
         const bulkClear = document.getElementById('bulkClearBtn');
@@ -787,9 +788,12 @@
         else if (df.mimeType.includes('spreadsheet')) { icon = '📊'; label = 'Google Sheet'; }
         else if (df.mimeType.includes('pdf')) { icon = '📕'; label = 'PDF'; }
 
+        const docKey = 'doc:' + df.id;
+        const isBulkSel = state.selectedGalleryIds.has(docKey);
         return `
-          <article class="item-card" data-doc-id="${df.id}">
-            <a class="item-thumb" href="${escapeHtml(df.webViewLink || '#')}" target="_blank" rel="noopener" style="text-decoration:none;">
+          <article class="item-card ${isBulkSel ? 'bulk-selected' : ''}" data-doc-id="${df.id}">
+            <a class="item-thumb" data-doc-thumb="${df.id}" href="${escapeHtml(df.webViewLink || '#')}" target="_blank" rel="noopener" style="text-decoration:none;">
+              <input type="checkbox" class="item-select-cb" data-select-doc="${df.id}" ${isBulkSel ? 'checked' : ''} title="Auswählen" />
               <div class="doc-icon-box">
                 <span>${icon}</span>
                 <span class="doc-icon-label">${label}</span>
@@ -931,6 +935,27 @@
             });
             document.body.appendChild(menu);
             document.addEventListener('click', () => menu.remove(), { once: true });
+          });
+        });
+
+        container.querySelectorAll('[data-select-doc]').forEach((cb) => {
+          cb.addEventListener('click', (e) => e.stopPropagation());
+          cb.addEventListener('change', () => {
+            const docKey = 'doc:' + cb.getAttribute('data-select-doc');
+            if (cb.checked) state.selectedGalleryIds.add(docKey);
+            else state.selectedGalleryIds.delete(docKey);
+            renderMainView();
+          });
+        });
+
+        container.querySelectorAll('[data-doc-thumb]').forEach((a) => {
+          a.addEventListener('click', (e) => {
+            if (!state.gallerySelectMode) return;
+            e.preventDefault();
+            const docKey = 'doc:' + a.getAttribute('data-doc-thumb');
+            if (state.selectedGalleryIds.has(docKey)) state.selectedGalleryIds.delete(docKey);
+            else state.selectedGalleryIds.add(docKey);
+            renderMainView();
           });
         });
 
@@ -2098,23 +2123,34 @@
             const sourceFc = state.folderContents[sourceFolderId];
             if (!sourceFc) return;
             const targets = (sourceFc.board.items || []).filter((it) => state.selectedGalleryIds.has(it.id));
-            if (targets.length === 0) return;
-            showSyncStatus(`Verschiebe ${targets.length} Element(e)…`, true);
+            const docTargets = (sourceFc.driveFiles || []).filter((df) => state.selectedGalleryIds.has('doc:' + df.id));
+            if (targets.length === 0 && docTargets.length === 0) return;
+            showSyncStatus(`Verschiebe ${targets.length + docTargets.length} Element(e)…`, true);
             try {
               for (const it of targets) {
                 await moveRawItemBetweenFolders(it, sourceFolderId, targetId, false);
               }
-              if (state.mode === 'drive') {
-                await saveBoardNow(targetId, true);
-                await saveBoardNow(sourceFolderId, true);
-              } else {
-                scheduleBoardSave(targetId);
-                scheduleBoardSave(sourceFolderId);
+              if (docTargets.length > 0) {
+                await ensureFoldersLoaded([targetId]);
+                for (const df of docTargets) {
+                  if (state.mode === 'drive') await DriveAdapter.moveFile(df.id, sourceFolderId, targetId);
+                  sourceFc.driveFiles = (sourceFc.driveFiles || []).filter((x) => x.id !== df.id);
+                  if (state.folderContents[targetId]) state.folderContents[targetId].driveFiles.unshift(df);
+                }
+              }
+              if (targets.length > 0) {
+                if (state.mode === 'drive') {
+                  await saveBoardNow(targetId, true);
+                  await saveBoardNow(sourceFolderId, true);
+                } else {
+                  scheduleBoardSave(targetId);
+                  scheduleBoardSave(sourceFolderId);
+                }
               }
               state.selectedGalleryIds.clear();
               state.gallerySelectMode = false;
               renderMainView();
-              showSyncStatus(`✅ ${targets.length} Element(e) verschoben`, true);
+              showSyncStatus(`✅ ${targets.length + docTargets.length} Element(e) verschoben`, true);
               setTimeout(() => showSyncStatus('', false), 2600);
             } catch (err) {
               await uiAlert('Fehler beim Verschieben: ' + err.message, 'Fehler');
@@ -2162,15 +2198,25 @@
         const fc = state.folderContents[folderId];
         if (!fc) return;
         const targets = (fc.board.items || []).filter((it) => state.selectedGalleryIds.has(it.id));
-        if (targets.length === 0) return;
-        if (!(await uiConfirm(`${targets.length} ausgewählte(s) Element(e) wirklich entfernen/löschen?`, 'Mehrfachauswahl löschen', 'Löschen'))) return;
-        fc.board.items = (fc.board.items || []).filter((it) => !state.selectedGalleryIds.has(it.id));
-        scheduleBoardSave(folderId);
+        const docTargets = (fc.driveFiles || []).filter((df) => state.selectedGalleryIds.has('doc:' + df.id));
+        const total = targets.length + docTargets.length;
+        if (total === 0) return;
+        if (!(await uiConfirm(`${total} ausgewählte(s) Element(e) wirklich entfernen/löschen?`, 'Mehrfachauswahl löschen', 'Löschen'))) return;
+        if (targets.length > 0) {
+          fc.board.items = (fc.board.items || []).filter((it) => !state.selectedGalleryIds.has(it.id));
+          scheduleBoardSave(folderId);
+        }
+        if (docTargets.length > 0) {
+          fc.driveFiles = (fc.driveFiles || []).filter((df) => !state.selectedGalleryIds.has('doc:' + df.id));
+        }
         if (state.mode === 'drive') {
           for (const it of targets) {
             if (it.type !== 'ref' && it.driveFileId) {
               try { await DriveAdapter.trashFile(it.driveFileId); } catch (e) {}
             }
+          }
+          for (const df of docTargets) {
+            try { await DriveAdapter.trashFile(df.id); } catch (e) {}
           }
         }
         state.selectedGalleryIds.clear();
