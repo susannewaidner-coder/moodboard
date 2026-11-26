@@ -458,9 +458,12 @@
           ? (item.localDataUrl || '')
           : (item.previewImageUrl || '');
         const shop = item.shopping && item.shopping.enabled ? item.shopping : null;
+        const shopStatus = shop ? (shop.status || 'idea') : '';
+        const shopLabels = { idea: '💡 Idee', ordered: '📦 Bestellt', bought: '✅ Gekauft' };
+        const shopCardClass = shop ? `shop-${shopStatus}` : '';
 
         return `
-          <article class="item-card" data-item-id="${item.id}">
+          <article class="item-card ${shopCardClass}" data-item-id="${item.id}">
             <div class="item-thumb" data-open-item="${item.id}">
               ${thumbSrc
                 ? `<img src="${escapeHtml(thumbSrc)}" alt="${escapeHtml(item.title)}" data-drive-img="${item.driveFileId || ''}" />`
@@ -469,7 +472,7 @@
                     : `<div class="doc-icon-box"><span>🔗</span><span class="doc-icon-label">Web-Link</span></div>`)
               }
               <span class="item-type-badge">${badge}</span>
-              ${shop ? `<span class="price-badge">${Number(shop.price || 0).toFixed(2)} €</span>` : ''}
+              ${shop ? `<span class="price-badge status-${shopStatus}">${shopLabels[shopStatus] || '💡 Idee'} · ${Number(shop.price || 0).toFixed(2)} €</span>` : ''}
             </div>
             <div class="item-body">
               <div>
