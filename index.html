@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>Moodboard &amp; Projekt-Planer — Google Drive</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <link rel="stylesheet" href="css/styles.css?v=1.0.42" />
+  <link rel="stylesheet" href="css/styles.css?v=1.0.43" />
 </head>
 </head>
 <body>
@@ -595,6 +595,35 @@
   </div>
 
   <!-- ======================================================================
+       MODAL: KI-LAYOUT OPTIONEN
+       ====================================================================== -->
+  <div id="aiLayoutModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="aiLayoutModalTitle">
+    <div class="modal-card" style="max-width:440px;">
+      <div class="modal-header">
+        <h2 id="aiLayoutModalTitle" class="modal-title">✨ KI-Layout erstellen</h2>
+        <button class="btn-icon" data-close-modal="aiLayoutModal" type="button">✕</button>
+      </div>
+      <p style="font-size:0.84rem; color:var(--text-secondary); margin-top:0;">
+        Ordnet alle sichtbaren Elemente im Editorial-Collage-Stil an. (Über <strong>↩️ Rückgängig</strong> jederzeit umkehrbar.)
+      </p>
+      <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:14px; font-size:0.85rem;">
+        <label style="display:flex; align-items:flex-start; gap:8px; cursor:pointer;">
+          <input id="aiLayoutKeepFormatCb" type="checkbox" checked style="margin-top:3px;" />
+          <span><strong>Bild-Formatierungen behalten</strong><br><span style="font-size:0.76rem; color:var(--text-muted);">Form (Kreis/Rund/Rechteck), Rand, Schatten, Freistellung &amp; Bilddarstellung bleiben unverändert.</span></span>
+        </label>
+        <label style="display:flex; align-items:flex-start; gap:8px; cursor:pointer;">
+          <input id="aiLayoutKeepElementsCb" type="checkbox" style="margin-top:3px;" />
+          <span><strong>Vorhandene Text- &amp; Paletten-Elemente behalten</strong><br><span style="font-size:0.76rem; color:var(--text-muted);">Statt neuer KI-Texte/Paletten werden deine bisherigen behalten.</span></span>
+        </label>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" data-close-modal="aiLayoutModal" type="button">Abbrechen</button>
+        <button id="aiLayoutRunBtn" class="btn btn-primary" type="button">✨ Layout anwenden</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================
        MODAL: UNIVERSELLES DIALOG-MODAL (ERSETZT ALERT / CONFIRM / PROMPT)
        ====================================================================== -->
   <!-- ======================================================================
@@ -655,9 +684,9 @@
     </div>
   </div>
 
-  <script defer src="js/core.js?v=1.0.42"></script>
-  <script defer src="js/views.js?v=1.0.42"></script>
-  <script defer src="js/canvas-home.js?v=1.0.42"></script>
-  <script defer src="js/ai-pdf.js?v=1.0.42"></script>
+  <script defer src="js/core.js?v=1.0.43"></script>
+  <script defer src="js/views.js?v=1.0.43"></script>
+  <script defer src="js/canvas-home.js?v=1.0.43"></script>
+  <script defer src="js/ai-pdf.js?v=1.0.43"></script>
 </body>
 </html>

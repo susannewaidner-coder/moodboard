@@ -950,8 +950,18 @@
           renderCanvasView(container, statsEl, folderId);
         });
 
-        document.getElementById('canvasAiLayoutBtn').addEventListener('click', async () => {
-          await generateAiMoodboardLayout(folderId, visualItems, content, stage, container, statsEl);
+        document.getElementById('canvasAiLayoutBtn').addEventListener('click', () => {
+          if (visualItems.length === 0) {
+            uiAlert('Bitte füge zuerst mindestens ein Bild oder Element zum Moodboard hinzu.');
+            return;
+          }
+          document.getElementById('aiLayoutRunBtn').onclick = async () => {
+            const keepFormatting = document.getElementById('aiLayoutKeepFormatCb').checked;
+            const keepElements = document.getElementById('aiLayoutKeepElementsCb').checked;
+            closeModal('aiLayoutModal');
+            await generateAiMoodboardLayout(folderId, visualItems, content, stage, container, statsEl, { keepFormatting, keepElements });
+          };
+          openModal('aiLayoutModal');
         });
 
         document.getElementById('canvasAddTextBtn').addEventListener('click', () => {
@@ -1444,7 +1454,7 @@
         }
       }
 
-      function buildEditorialGridPlan(visualItems, director, projectTitle, fallbackPalette) {
+      function buildEditorialGridPlan(visualItems, director, projectTitle, fallbackPalette, keepFormatting = false) {
         const gap = 14;
         const boardW = 840;
         const startX = 40;
@@ -1458,9 +1468,17 @@
           if (!orderedIds.includes(it.id)) orderedIds.push(it.id);
         }
 
-        const circleSet = new Set(Array.isArray(director.circleIds) ? director.circleIds.filter((id) => idMap.has(id)).slice(0, 2) : []);
-        if (circleSet.size === 0 && orderedIds.length >= 6) {
-          circleSet.add(orderedIds[orderedIds.length - 1]);
+        let circleSet;
+        if (keepFormatting) {
+          circleSet = new Set(orderedIds.filter((id) => {
+            const it = idMap.get(id);
+            return it && it.canvas && it.canvas.shape === 'circle';
+          }));
+        } else {
+          circleSet = new Set(Array.isArray(director.circleIds) ? director.circleIds.filter((id) => idMap.has(id)).slice(0, 2) : []);
+          if (circleSet.size === 0 && orderedIds.length >= 6) {
+            circleSet.add(orderedIds[orderedIds.length - 1]);
+          }
         }
 
         const gridIds = orderedIds.filter((id) => !circleSet.has(id));
@@ -1594,7 +1612,8 @@
         };
       }
 
-      async function generateAiMoodboardLayout(folderId, visualItems, content, stage, container, statsEl) {
+      async function generateAiMoodboardLayout(folderId, visualItems, content, stage, container, statsEl, opts = {}) {
+        const { keepFormatting = false, keepElements = false } = opts;
         if (visualItems.length === 0) {
           await uiAlert('Bitte füge zuerst mindestens ein Bild oder Element zum Moodboard hinzu.');
           return;
@@ -1645,7 +1664,7 @@ Antworte ausschließlich als JSON.`;
           showSyncStatus('', false);
         }
 
-        const plan = buildEditorialGridPlan(visualItems, director || {}, projectTitle, fallbackPalette);
+        const plan = buildEditorialGridPlan(visualItems, director || {}, projectTitle, fallbackPalette, keepFormatting);
 
         pushCanvasUndo(folderId);
 
@@ -1658,17 +1677,25 @@ Antworte ausschließlich als JSON.`;
             it.canvas.w = p.w;
             it.canvas.h = p.h;
             it.canvas.z = p.z;
-            it.canvas.shape = p.shape;
-            it.canvas.frameColor = p.frameColor || '';
-            it.canvas.frameWidth = p.frameWidth || 6;
-            it.canvas.shadow = !!p.shadow;
-            it.canvas.fitMode = 'cover';
-            delete it.canvas.frame;
+            if (!keepFormatting) {
+              it.canvas.shape = p.shape;
+              it.canvas.frameColor = p.frameColor || '';
+              it.canvas.frameWidth = p.frameWidth || 6;
+              it.canvas.shadow = !!p.shadow;
+              it.canvas.fitMode = 'cover';
+              delete it.canvas.frame;
+            } else if (it.canvas.shape === 'circle') {
+              const s = Math.min(it.canvas.w, it.canvas.h);
+              it.canvas.w = s;
+              it.canvas.h = s;
+            }
             delete it.canvas._needsAutoAspect;
           }
         });
 
-        content.board.canvasElements = plan.elements;
+        if (!keepElements) {
+          content.board.canvasElements = plan.elements;
+        }
 
         if (!content.board.canvasSettings) content.board.canvasSettings = {};
         if (plan.bgColor && /^#[0-9a-fA-F]{6}$/.test(plan.bgColor)) {
