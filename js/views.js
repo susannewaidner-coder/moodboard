@@ -788,7 +788,7 @@
         else if (df.mimeType.includes('pdf')) { icon = '📕'; label = 'PDF'; }
 
         return `
-          <article class="item-card">
+          <article class="item-card" data-doc-id="${df.id}">
             <a class="item-thumb" href="${escapeHtml(df.webViewLink || '#')}" target="_blank" rel="noopener" style="text-decoration:none;">
               <div class="doc-icon-box">
                 <span>${icon}</span>
@@ -797,10 +797,16 @@
               <span class="item-type-badge">${label}</span>
             </a>
             <div class="item-body">
-              <h3 class="item-title">${escapeHtml(df.name)}</h3>
+              <div style="min-width:0; flex:1;">
+                <h3 class="item-title">${escapeHtml(df.name)}</h3>
+              </div>
               <div class="item-meta">
                 <span>Google Drive Datei</span>
-                <a class="btn-icon" href="${escapeHtml(df.webViewLink || '#')}" target="_blank" rel="noopener" title="In Google Drive öffnen">↗</a>
+                <div class="item-actions">
+                  <a class="btn-icon" href="${escapeHtml(df.webViewLink || '#')}" target="_blank" rel="noopener" title="In Google Drive öffnen">↗</a>
+                  <button class="btn-icon" data-rename-doc="${df.id}" type="button" title="Umbenennen">✎</button>
+                  <button class="btn-icon" data-doc-menu="${df.id}" type="button" title="Weitere Aktionen">⋯</button>
+                </div>
               </div>
             </div>
           </article>
@@ -818,6 +824,114 @@
           } catch (e) {
             console.warn('Bild konnte nicht geladen werden:', fileId, e);
           }
+        });
+
+        container.querySelectorAll('[data-rename-doc]').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const docId = btn.getAttribute('data-rename-doc');
+            const fc = state.folderContents[folderId];
+            const df = fc ? (fc.driveFiles || []).find((x) => x.id === docId) : null;
+            if (!df) return;
+            const res = await uiPromptForm('Dokument umbenennen', [
+              { key: 'name', label: 'Neuer Name', value: df.name, required: true }
+            ]);
+            if (!res || !res.name.trim() || res.name.trim() === df.name) return;
+            const nextName = res.name.trim();
+            if (state.mode === 'drive') {
+              showSyncStatus('Benenne Datei um…', true);
+              try {
+                await DriveAdapter.renameFile(df.id, nextName);
+              } catch (err) {
+                await uiAlert('Fehler beim Umbenennen: ' + err.message, 'Fehler');
+                showSyncStatus('', false);
+                return;
+              }
+              showSyncStatus('', false);
+            }
+            df.name = nextName;
+            renderMainView();
+          });
+        });
+
+        container.querySelectorAll('[data-doc-menu]').forEach((btn) => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const docId = btn.getAttribute('data-doc-menu');
+            const fc = state.folderContents[folderId];
+            const df = fc ? (fc.driveFiles || []).find((x) => x.id === docId) : null;
+            if (!df) return;
+
+            const old = document.getElementById('itemMenuPopover');
+            if (old) {
+              const same = old.getAttribute('data-for') === docId;
+              old.remove();
+              if (same) return;
+            }
+
+            const rect = btn.getBoundingClientRect();
+            const menu = document.createElement('div');
+            menu.id = 'itemMenuPopover';
+            menu.setAttribute('data-for', docId);
+            menu.className = 'tree-menu-popover';
+            menu.style.top = `${Math.min(window.innerHeight - 130, rect.bottom + 4)}px`;
+            menu.style.left = `${Math.max(10, Math.min(window.innerWidth - 195, rect.right - 180))}px`;
+            menu.innerHTML = `
+              <button class="tree-menu-item" data-doc-action="move" type="button">📁 Verschieben</button>
+              <button class="tree-menu-item" data-doc-action="delete" type="button" style="color:var(--danger);">🗑 Löschen</button>
+            `;
+            menu.addEventListener('click', (ev) => ev.stopPropagation());
+            menu.querySelector('[data-doc-action="move"]').addEventListener('click', () => {
+              menu.remove();
+              const options = buildFolderOptionList(new Set(), false, new Set([folderId]));
+              if (options.length === 0) {
+                uiAlert('Kein anderer Zielordner vorhanden.');
+                return;
+              }
+              openFolderSelectModal({
+                title: `„${df.name}“ verschieben`,
+                desc: 'Wähle den Zielordner:',
+                options,
+                confirmText: 'Verschieben',
+                onConfirm: async (targetId) => {
+                  if (state.mode === 'drive') {
+                    showSyncStatus('Verschiebe Datei in Drive…', true);
+                    try {
+                      await DriveAdapter.moveFile(df.id, folderId, targetId);
+                    } catch (err) {
+                      await uiAlert('Fehler beim Verschieben: ' + err.message, 'Fehler');
+                      showSyncStatus('', false);
+                      return;
+                    }
+                    showSyncStatus('', false);
+                  }
+                  fc.driveFiles = (fc.driveFiles || []).filter((x) => x.id !== df.id);
+                  if (state.folderContents[targetId]) {
+                    state.folderContents[targetId].driveFiles.unshift(df);
+                  }
+                  renderMainView();
+                }
+              });
+            });
+            menu.querySelector('[data-doc-action="delete"]').addEventListener('click', async () => {
+              menu.remove();
+              if (!(await uiConfirm(`Datei „${df.name}“ wirklich in den Papierkorb verschieben?`, 'Datei löschen', 'Löschen'))) return;
+              if (state.mode === 'drive') {
+                showSyncStatus('Lösche Datei in Drive…', true);
+                try {
+                  await DriveAdapter.trashFile(df.id);
+                } catch (err) {
+                  await uiAlert('Fehler beim Löschen: ' + err.message, 'Fehler');
+                  showSyncStatus('', false);
+                  return;
+                }
+                showSyncStatus('', false);
+              }
+              fc.driveFiles = (fc.driveFiles || []).filter((x) => x.id !== df.id);
+              renderMainView();
+            });
+            document.body.appendChild(menu);
+            document.addEventListener('click', () => menu.remove(), { once: true });
+          });
         });
 
         container.querySelectorAll('[data-select-item]').forEach((cb) => {
