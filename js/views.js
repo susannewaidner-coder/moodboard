@@ -1136,6 +1136,8 @@
 
           if (!driveFileId && uploadImgs && fetchCandidates.length > 0) {
             for (const cand of fetchCandidates) {
+              // Raindrop-Domains blockieren Browser-fetch() per CORS; direkt als previewImageUrl nutzen
+              if (/^https?:\/\/(api|up)\.raindrop\.io\//i.test(cand)) continue;
               try {
                 const res = await fetch(cand);
                 if (res.ok) {
