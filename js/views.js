@@ -1096,8 +1096,23 @@
           const fc = state.folderContents[targetFolderId];
           const url = row.url || '';
           const coverUrl = unwrapRaindropCover(row.cover || '');
-          const isDup = url && (fc.board.items || []).some((it) => it.url === url || it.sourceUrl === url);
-          if (isDup) { skippedCount++; continue; }
+          const isRaindropFile = /api\.raindrop\.io\/v2\/raindrop\/\d+\/file/i.test(url) || /\.(jpe?g|png|webp|gif)(\?|$)/i.test(url) || /wasabisys\.com\/cache\.raindrop\.io/i.test(url);
+          const fetchCandidates = isRaindropFile
+            ? [url, coverUrl].filter(Boolean)
+            : [coverUrl].filter(Boolean);
+          const fallbackPreviewUrl = isRaindropFile ? (url || coverUrl) : (coverUrl || '');
+
+          const existingDup = url ? (fc.board.items || []).find((it) => it.url === url || it.sourceUrl === url || (isRaindropFile && it.previewImageUrl === coverUrl)) : null;
+          if (existingDup) {
+            // Bestehenden Raindrop-Import reparieren, falls bisher kaputte up.raindrop.io-URL drin stand
+            if (isRaindropFile && !existingDup.driveFileId && existingDup.previewImageUrl !== fallbackPreviewUrl) {
+              existingDup.previewImageUrl = fallbackPreviewUrl;
+              importedCount++;
+            } else {
+              skippedCount++;
+            }
+            continue;
+          }
 
           // Tags verarbeiten
           const rawTags = (row.tags || '').split(',').map((t) => t.trim()).filter(Boolean);
@@ -1111,32 +1126,33 @@
           const allowedMap = new Map(state.globalTags.map((t) => [t.toLowerCase(), t]));
           const finalTags = rawTags.map((t) => allowedMap.get(t.toLowerCase())).filter(Boolean);
 
-          const isRaindropFile = /api\.raindrop\.io\/v2\/raindrop\/\d+\/file/i.test(url) || /\.(jpe?g|png|webp|gif)(\?|$)/i.test(url);
-          const imgCandidate = coverUrl || (isRaindropFile ? url : '');
           let driveFileId = '';
           let localDataUrl = '';
 
-          if (uploadImgs && imgCandidate) {
-            try {
-              const res = await fetch(imgCandidate);
-              if (res.ok) {
-                const blob = await res.blob();
-                if (blob.type.startsWith('image/')) {
-                  if (state.mode === 'demo') {
-                    localDataUrl = await new Promise((resolve) => {
-                      const reader = new FileReader();
-                      reader.onload = () => resolve(reader.result);
-                      reader.readAsDataURL(blob);
-                    });
-                  } else if (state.mode === 'drive') {
-                    const ext = (blob.type.split('/')[1] || 'jpg').split(';')[0];
-                    const fname = `rd-${row.id || Date.now()}.${ext}`;
-                    const up = await DriveAdapter.uploadMultipart(targetFolderId, fname, blob.type, blob);
-                    driveFileId = up.id;
+          if (uploadImgs && fetchCandidates.length > 0) {
+            for (const cand of fetchCandidates) {
+              try {
+                const res = await fetch(cand);
+                if (res.ok) {
+                  const blob = await res.blob();
+                  if (blob.type.startsWith('image/')) {
+                    if (state.mode === 'demo') {
+                      localDataUrl = await new Promise((resolve) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(reader.result);
+                        reader.readAsDataURL(blob);
+                      });
+                    } else if (state.mode === 'drive') {
+                      const ext = (blob.type.split('/')[1] || 'jpg').split(';')[0];
+                      const fname = `rd-${row.id || Date.now()}.${ext}`;
+                      const up = await DriveAdapter.uploadMultipart(targetFolderId, fname, blob.type, blob);
+                      driveFileId = up.id;
+                    }
+                    break;
                   }
                 }
-              }
-            } catch (e) { /* CORS-geschützt -> Fallback auf previewImageUrl */ }
+              } catch (e) { /* Nächsten Kandidaten oder previewImageUrl-Fallback nutzen */ }
+            }
           }
 
           const title = row.title || (isRaindropFile ? 'Raindrop Bild' : url);
@@ -1149,7 +1165,7 @@
             localDataUrl: localDataUrl || undefined,
             url: isRaindropFile ? '' : url,
             sourceUrl: isRaindropFile ? '' : url,
-            previewImageUrl: (!driveFileId && !localDataUrl) ? imgCandidate : '',
+            previewImageUrl: (!driveFileId && !localDataUrl) ? fallbackPreviewUrl : '',
             title,
             note,
             tags: Array.from(new Set(finalTags))
