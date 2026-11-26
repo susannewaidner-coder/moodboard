@@ -458,9 +458,13 @@
           ? (item.localDataUrl || '')
           : (item.previewImageUrl || '');
         const shop = item.shopping && item.shopping.enabled ? item.shopping : null;
-        const shopStatus = shop ? (shop.status || 'idea') : '';
+        const shopStatus = (item.shopping && item.shopping.status) ? item.shopping.status : 'idea';
         const shopLabels = { idea: '💡 Idee', ordered: '📦 Bestellt', bought: '✅ Gekauft' };
-        const shopCardClass = shop ? `shop-${shopStatus}` : '';
+        const shopCardClass = `shop-${shopStatus}`;
+        const priceVal = shop ? Number(shop.price || 0) : 0;
+        const badgeText = priceVal > 0
+          ? `${shopLabels[shopStatus] || '💡 Idee'} · ${priceVal.toFixed(2)} €`
+          : (shopLabels[shopStatus] || '💡 Idee');
 
         return `
           <article class="item-card ${shopCardClass}" data-item-id="${item.id}">
@@ -472,7 +476,7 @@
                     : `<div class="doc-icon-box"><span>🔗</span><span class="doc-icon-label">Web-Link</span></div>`)
               }
               <span class="item-type-badge">${badge}</span>
-              ${shop ? `<span class="price-badge status-${shopStatus}">${shopLabels[shopStatus] || '💡 Idee'} · ${Number(shop.price || 0).toFixed(2)} €</span>` : ''}
+              <span class="price-badge status-${shopStatus}">${badgeText}</span>
             </div>
             <div class="item-body">
               <div>
