@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>Moodboard &amp; Projekt-Planer — Google Drive</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <link rel="stylesheet" href="css/styles.css?v=1.0.32" />
+  <link rel="stylesheet" href="css/styles.css?v=1.0.33" />
 </head>
 </head>
 <body>
@@ -491,7 +491,7 @@
         <label class="form-label" for="ctTextInput">Text</label>
         <textarea id="ctTextInput" class="form-control" rows="2" placeholder="z. B. COASTAL oder Minimalist Design"></textarea>
       </div>
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;">
         <div class="form-group">
           <label class="form-label" for="ctShapeSelect">Form</label>
           <select id="ctShapeSelect" class="form-control">
@@ -506,6 +506,14 @@
             <option value="sans">Modern (Sans)</option>
             <option value="serif">Editorial (Serif)</option>
             <option value="outline">Kontur (Outline)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ctAlignSelect">Ausrichtung</label>
+          <select id="ctAlignSelect" class="form-control">
+            <option value="center">Zentriert</option>
+            <option value="left">Linksbündig</option>
+            <option value="right">Rechtsbündig</option>
           </select>
         </div>
       </div>
@@ -529,10 +537,16 @@
           </div>
         </div>
       </div>
-      <label style="display:flex; align-items:center; gap:8px; font-size:0.84rem; cursor:pointer; margin-bottom:10px;">
-        <input id="ctWhiteFrameCb" type="checkbox" />
-        <span>⬜ Weißer Rand (ideal für Kreis-Badges)</span>
-      </label>
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
+        <label style="display:flex; align-items:center; gap:8px; font-size:0.84rem; cursor:pointer;">
+          <input id="ctWhiteFrameCb" type="checkbox" />
+          <span>⬜ Rand anzeigen</span>
+        </label>
+        <div class="hex-color-pair" title="Randfarbe">
+          <input id="ctFrameColorInput" type="color" value="#FFFFFF" />
+          <input id="ctFrameColorHex" class="form-control hex-input" type="text" maxlength="7" value="#FFFFFF" placeholder="#FFFFFF" />
+        </div>
+      </div>
       <div class="modal-footer">
         <button class="btn" data-close-modal="canvasTextModal" type="button">Abbrechen</button>
         <button id="ctSaveBtn" class="btn btn-primary" type="button">Übernehmen</button>
@@ -549,12 +563,21 @@
         <h2 id="canvasPaletteModalTitle" class="modal-title">🎨 Farbpalette bearbeiten</h2>
         <button class="btn-icon" data-close-modal="canvasPaletteModal" type="button">✕</button>
       </div>
-      <div class="form-group">
-        <label class="form-label" for="cpShapeSelect">Feld-Form</label>
-        <select id="cpShapeSelect" class="form-control">
-          <option value="rect">Rechtecke</option>
-          <option value="circle">Kreise</option>
-        </select>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <div class="form-group">
+          <label class="form-label" for="cpShapeSelect">Feld-Form</label>
+          <select id="cpShapeSelect" class="form-control">
+            <option value="rect">Rechtecke</option>
+            <option value="circle">Kreise</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="cpOrientationSelect">Ausrichtung</label>
+          <select id="cpOrientationSelect" class="form-control">
+            <option value="horizontal">Waagerecht</option>
+            <option value="vertical">Senkrecht</option>
+          </select>
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label">Farben</label>
@@ -632,9 +655,9 @@
     </div>
   </div>
 
-  <script defer src="js/core.js?v=1.0.32"></script>
-  <script defer src="js/views.js?v=1.0.32"></script>
-  <script defer src="js/canvas-home.js?v=1.0.32"></script>
-  <script defer src="js/ai-pdf.js?v=1.0.32"></script>
+  <script defer src="js/core.js?v=1.0.33"></script>
+  <script defer src="js/views.js?v=1.0.33"></script>
+  <script defer src="js/canvas-home.js?v=1.0.33"></script>
+  <script defer src="js/ai-pdf.js?v=1.0.33"></script>
 </body>
 </html>
