@@ -207,17 +207,19 @@
         if (cb && val) await cb(val);
       });
 
-      function buildFolderOptionList(excludeIds = new Set(), includeRoot = true) {
+      function buildFolderOptionList(excludeSubtreeIds = new Set(), includeRoot = true, excludeSelfIds = new Set()) {
         const opts = [];
-        if (includeRoot && state.rootFolderId && !excludeIds.has(state.rootFolderId)) {
+        if (includeRoot && state.rootFolderId && !excludeSubtreeIds.has(state.rootFolderId) && !excludeSelfIds.has(state.rootFolderId)) {
           opts.push({ value: state.rootFolderId, label: '📁 Moodboards (Hauptebene)' });
         }
         function walk(parentId, prefix = '') {
-          const children = state.folders.filter((f) => (f.parents || []).includes(parentId) && !excludeIds.has(f.id));
+          const children = state.folders.filter((f) => (f.parents || []).includes(parentId) && !excludeSubtreeIds.has(f.id));
           for (const ch of children) {
             const icon = isInventoryFolder(ch.id) ? '📦' : '📁';
             const labelName = ch.name === '_Inventory' ? 'Inventory' : ch.name;
-            opts.push({ value: ch.id, label: `${prefix}${icon} ${labelName}` });
+            if (!excludeSelfIds.has(ch.id)) {
+              opts.push({ value: ch.id, label: `${prefix}${icon} ${labelName}` });
+            }
             walk(ch.id, prefix + '  ↳ ');
           }
         }
@@ -1968,7 +1970,7 @@
       }
 
       async function bulkMoveItemsToFolder(sourceFolderId) {
-        const options = buildFolderOptionList(new Set([sourceFolderId]), false);
+        const options = buildFolderOptionList(new Set(), false, new Set([sourceFolderId]));
         if (options.length === 0) {
           await uiAlert('Kein anderer Zielordner vorhanden.');
           return;
