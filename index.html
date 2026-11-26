@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>Moodboard &amp; Projekt-Planer — Google Drive</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <link rel="stylesheet" href="css/styles.css?v=1.0.20" />
+  <link rel="stylesheet" href="css/styles.css?v=1.0.21" />
 </head>
 </head>
 <body>
@@ -33,6 +33,12 @@
           <button id="newRootFolderBtn" class="btn-icon" type="button" title="Neues Hauptprojekt anlegen">＋</button>
         </div>
         <div id="folderTree"></div>
+
+        <div class="sidebar-section-label" style="margin-top:12px;">
+          <span>📦 Inventory</span>
+          <button id="newInventoryFolderBtn" class="btn-icon" type="button" title="Neuen Inventory-Ordner anlegen">＋</button>
+        </div>
+        <div id="inventoryTree"></div>
 
         <div class="sidebar-section-label" style="margin-top:12px;">Ansichten</div>
         <button class="nav-item" data-quick="all" type="button">
@@ -177,6 +183,10 @@
         <button class="btn-icon" data-close-modal="itemModal" type="button">✕</button>
       </div>
 
+      <div id="itemRefInfoBanner" class="hidden" style="background:var(--card-subtle); border:1px solid var(--border-color); border-radius:var(--radius-sm); padding:8px 10px; font-size:0.8rem; color:var(--text-secondary); margin-bottom:12px;">
+        🔗 <strong>Verknüpftes Inventory-Element:</strong> Titel, Bild, Link, Tags &amp; Lagerort werden zentral im Inventory gespeichert. Einkaufsstatus &amp; Menge gelten nur für dieses Projekt.
+      </div>
+
       <div class="form-group">
         <label class="form-label" for="itemTitleInput">Titel</label>
         <input id="itemTitleInput" class="form-control" type="text" placeholder="z. B. Stabkerzen Salbei" />
@@ -200,6 +210,12 @@
       <div class="form-group">
         <label class="form-label" for="itemNoteInput">Notiz</label>
         <textarea id="itemNoteInput" class="form-control" rows="3" placeholder="Maße, Farbhinweis, Material..."></textarea>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="itemLocationSelect">📍 Lagerort (optional)</label>
+        <select id="itemLocationSelect" class="form-control"></select>
+        <div class="form-hint">Neue Lagerorte kannst du über „📍 Lagerorte“ in der Galerie pflegen.</div>
       </div>
 
       <div class="form-group">
@@ -351,6 +367,76 @@
   </div>
 
   <!-- ======================================================================
+       MODAL: LAGERORTE VERWALTEN
+       ====================================================================== -->
+  <div id="locationsManagerModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="locationsManagerTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="locationsManagerTitle" class="modal-title">📍 Lagerorte verwalten</h2>
+        <button class="btn-icon" data-close-modal="locationsManagerModal" type="button">✕</button>
+      </div>
+      <p style="font-size:0.84rem; color:var(--text-secondary); margin-top:0;">
+        Pflege hier deine physischen Lagerorte (z. B. <em>Kiste 1, Arbeitszimmer</em> oder <em>Regal links, Keller</em>).
+      </p>
+      <div style="display:flex; gap:8px; margin-bottom:14px;">
+        <input id="newGlobalLocationInput" class="form-control" type="text" placeholder="Neuer Lagerort (z. B. Kiste 2, Keller)..." />
+        <button id="addGlobalLocationBtn" class="btn btn-oak btn-sm" type="button">＋ Hinzufügen</button>
+      </div>
+      <div id="globalLocationsList" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" data-close-modal="locationsManagerModal" type="button">Fertig</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================
+       MODAL: AUS INVENTORY EINBINDEN
+       ====================================================================== -->
+  <div id="inventoryPickerModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="inventoryPickerTitle">
+    <div class="modal-card" style="max-width:860px;">
+      <div class="modal-header">
+        <h2 id="inventoryPickerTitle" class="modal-title">📦 Aus Inventory einbinden</h2>
+        <button class="btn-icon" data-close-modal="inventoryPickerModal" type="button">✕</button>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+        <select id="invPickerFolderSelect" class="form-control" style="max-width:240px;"></select>
+        <input id="invPickerSearchInput" class="form-control" type="search" placeholder="Suche nach Titel, Tag oder Lagerort..." style="flex:1; min-width:180px;" />
+      </div>
+      <div id="invPickerGrid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:10px; max-height:54vh; overflow-y:auto; padding:2px;"></div>
+      <div class="modal-footer" style="justify-content:space-between;">
+        <span id="invPickerCount" style="font-size:0.84rem; color:var(--text-muted);">0 ausgewählt</span>
+        <div style="display:flex; gap:8px;">
+          <button class="btn" data-close-modal="inventoryPickerModal" type="button">Abbrechen</button>
+          <button id="invPickerConfirmBtn" class="btn btn-primary" type="button" disabled>In Projekt einbinden</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================
+       MODAL: ELEMENT INS INVENTORY VERSCHIEBEN
+       ====================================================================== -->
+  <div id="moveToInventoryModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="moveToInventoryTitle">
+    <div class="modal-card" style="max-width:460px;">
+      <div class="modal-header">
+        <h2 id="moveToInventoryTitle" class="modal-title">📦 Ins Inventory verschieben</h2>
+        <button class="btn-icon" data-close-modal="moveToInventoryModal" type="button">✕</button>
+      </div>
+      <p style="font-size:0.84rem; color:var(--text-secondary); margin-top:0;">
+        Das Element wird in den gewählten Inventory-Ordner verschoben und bleibt in diesem Projekt automatisch als Verknüpfung erhalten.
+      </p>
+      <div class="form-group">
+        <label class="form-label" for="moveToInvFolderSelect">Zielordner im Inventory</label>
+        <select id="moveToInvFolderSelect" class="form-control"></select>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" data-close-modal="moveToInventoryModal" type="button">Abbrechen</button>
+        <button id="moveToInvConfirmBtn" class="btn btn-primary" type="button">Verschieben &amp; verknüpfen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================
        MODAL: UNIVERSELLES DIALOG-MODAL (ERSETZT ALERT / CONFIRM / PROMPT)
        ====================================================================== -->
   <!-- ======================================================================
@@ -411,9 +497,9 @@
     </div>
   </div>
 
-  <script defer src="js/core.js?v=1.0.20"></script>
-  <script defer src="js/views.js?v=1.0.20"></script>
-  <script defer src="js/canvas-home.js?v=1.0.20"></script>
-  <script defer src="js/ai-pdf.js?v=1.0.20"></script>
+  <script defer src="js/core.js?v=1.0.21"></script>
+  <script defer src="js/views.js?v=1.0.21"></script>
+  <script defer src="js/canvas-home.js?v=1.0.21"></script>
+  <script defer src="js/ai-pdf.js?v=1.0.21"></script>
 </body>
 </html>
