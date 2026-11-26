@@ -183,8 +183,11 @@
           </div>
 
           <div id="canvasSelectionBar" class="canvas-selection-bar">
+            <span class="sel-group">
+              <button class="btn btn-sm" id="canvasSelectAllBtn" type="button" title="Alle Elemente auf dem Board auswählen (Strg+A)">☑️ Alle</button>
+              ${selectedList.length > 0 ? `<button class="btn btn-sm" id="canvasDeselectAllBtn" type="button" title="Auswahl aufheben">✕ (${selectedList.length})</button>` : ''}
+            </span>
             ${selectedList.length > 0 ? `
-              <span class="sel-group"><strong>${selectedList.length} ausgew.</strong></span>
               ${firstSel && firstSel.kind === 'item' ? (() => {
                 const fc = firstSel.box;
                 const fCol = fc.frameColor || (fc.frame === 'white' ? '#FFFFFF' : '');
@@ -206,6 +209,7 @@
                     <button id="canvasFitBtn" class="btn btn-sm ${selFit === 'contain' ? 'btn-oak' : ''}" type="button" title="Bilddarstellung umschalten: Kachel ausfüllen vs. Ganzes Bild">
                       ${selFit === 'contain' ? '🖼️ Ganz' : '✂️ Füllen'}
                     </button>
+                    <button id="selRemoveBgBtn" class="btn btn-sm ${fc.removeWhiteBg ? 'btn-oak' : ''}" type="button" title="Weißen Hintergrund transparent freistellen">🪄 Freistellen</button>
                   </span>
                   <span class="sel-group" title="Rahmen &amp; Schatten">
                     <button class="btn btn-sm ${fCol ? 'btn-oak' : ''}" id="selFrameToggleBtn" type="button">⬜ Rand</button>
@@ -254,14 +258,14 @@
                   const fCol = c.frameColor || (c.frame === 'white' ? '#FFFFFF' : '');
                   const fWidth = Math.max(1, Number(c.frameWidth) || 6);
                   const frameStyle = fCol ? `border:${fWidth}px solid ${escapeHtml(fCol)};` : '';
-                  const shadowStyle = c.shadow === false ? 'box-shadow:none;' : (fCol ? 'box-shadow:var(--shadow-md);' : '');
+                  const shadowStyle = (c.shadow === false || c.removeWhiteBg) ? 'box-shadow:none;' : (fCol ? 'box-shadow:var(--shadow-md);' : '');
                   const itemFit = c.fitMode || fitMode;
                   const cx = c.cropX ?? 50;
                   const cy = c.cropY ?? 50;
                   const cz = c.cropZoom || 1;
                   const imgStyle = `object-position:${cx}% ${cy}%; transform:scale(${cz}); transform-origin:${cx}% ${cy}%;`;
                   return `
-                    <div class="canvas-item ${isSelected ? 'selected' : ''} ${itemFit === 'contain' ? 'fit-contain' : ''} ${shapeCls}"
+                    <div class="canvas-item ${isSelected ? 'selected' : ''} ${itemFit === 'contain' ? 'fit-contain' : ''} ${shapeCls} ${c.removeWhiteBg ? 'bg-removed' : ''}"
                          data-canvas-id="${rawItem.id}"
                          data-canvas-kind="item"
                          style="left:${c.x}px; top:${c.y}px; width:${c.w}px; height:${c.h}px; z-index:${c.z || 1}; ${frameStyle} ${shadowStyle}">
@@ -307,12 +311,13 @@
                   const outlineCss = el.fontStyle === 'outline'
                     ? `color:transparent; -webkit-text-stroke: 1.5px ${escapeHtml(el.color || '#A59858')};`
                     : `color:${escapeHtml(el.color || '#262927')};`;
+                  const padStyle = el.shape === 'circle' ? 'padding:14%;' : '';
                   return `
                     <div class="canvas-item ${isSelected ? 'selected' : ''} ${shapeCls}"
                          data-canvas-id="${el.id}"
                          data-canvas-kind="el"
                          style="left:${el.x}px; top:${el.y}px; width:${el.w}px; height:${el.h}px; z-index:${el.z || 10}; background-color:${escapeHtml(bgStyle)}; ${frameStyle} ${el.shape === 'none' ? 'box-shadow:none;' : ''}">
-                      <div class="canvas-el-text" style="font-size:${Number(el.fontSize) || 24}px; font-family:${fontFam}; text-align:${align}; justify-content:${justify}; font-weight:${el.fontStyle === 'outline' ? '800' : '500'}; ${outlineCss}">${escapeHtml(el.text || 'Text').replace(/\n/g, '<br>')}</div>
+                      <div class="canvas-el-text" style="${padStyle} font-size:${Number(el.fontSize) || 24}px; font-family:${fontFam}; justify-content:center; font-weight:${el.fontStyle === 'outline' ? '800' : '500'}; ${outlineCss}"><span style="display:inline-block; width:100%; text-align:${align};">${escapeHtml(el.text || 'Text').replace(/\n/g, '<br>')}</span></div>
                       ${state.canvasLocked ? '' : '<div class="canvas-resize-handle" data-resize-handle="1"></div>'}
                     </div>
                   `;
@@ -367,6 +372,89 @@
           });
         }
 
+        const cutoutCache = state.cutoutCache || (state.cutoutCache = new Map());
+
+        function createCutoutDataUrl(imgEl, tolerance = 26) {
+          const origSrc = imgEl.dataset.origSrc || imgEl.src;
+          if (!origSrc || origSrc.startsWith('data:image/png;base64,')) return origSrc;
+          const key = `${origSrc}::${tolerance}`;
+          if (cutoutCache.has(key)) return cutoutCache.get(key);
+          try {
+            const maxSide = 1100;
+            const scale = Math.min(1, maxSide / Math.max(imgEl.naturalWidth, imgEl.naturalHeight));
+            const w = Math.max(1, Math.round(imgEl.naturalWidth * scale));
+            const h = Math.max(1, Math.round(imgEl.naturalHeight * scale));
+            const c = document.createElement('canvas');
+            c.width = w;
+            c.height = h;
+            const ctx = c.getContext('2d', { willReadFrequently: true });
+            ctx.drawImage(imgEl, 0, 0, w, h);
+            const imgData = ctx.getImageData(0, 0, w, h);
+            const data = imgData.data;
+            const visited = new Uint8Array(w * h);
+            const queue = new Int32Array(w * h);
+            let head = 0, tail = 0;
+
+            const thr = 255 - tolerance;
+            const softThr = thr - 14;
+            const isNearWhite = (idx) => {
+              const p = idx * 4;
+              return data[p] >= thr && data[p + 1] >= thr && data[p + 2] >= thr;
+            };
+
+            for (let x = 0; x < w; x++) {
+              const top = x;
+              const bot = (h - 1) * w + x;
+              if (isNearWhite(top) && !visited[top]) { visited[top] = 1; queue[tail++] = top; }
+              if (isNearWhite(bot) && !visited[bot]) { visited[bot] = 1; queue[tail++] = bot; }
+            }
+            for (let y = 0; y < h; y++) {
+              const left = y * w;
+              const right = y * w + (w - 1);
+              if (isNearWhite(left) && !visited[left]) { visited[left] = 1; queue[tail++] = left; }
+              if (isNearWhite(right) && !visited[right]) { visited[right] = 1; queue[tail++] = right; }
+            }
+
+            while (head < tail) {
+              const idx = queue[head++];
+              const p = idx * 4;
+              data[p + 3] = 0;
+              const x = idx % w;
+              const y = (idx - x) / w;
+              if (x > 0) { const n = idx - 1; if (!visited[n] && isNearWhite(n)) { visited[n] = 1; queue[tail++] = n; } }
+              if (x < w - 1) { const n = idx + 1; if (!visited[n] && isNearWhite(n)) { visited[n] = 1; queue[tail++] = n; } }
+              if (y > 0) { const n = idx - w; if (!visited[n] && isNearWhite(n)) { visited[n] = 1; queue[tail++] = n; } }
+              if (y < h - 1) { const n = idx + w; if (!visited[n] && isNearWhite(n)) { visited[n] = 1; queue[tail++] = n; } }
+            }
+
+            // Weiche Kante an direkten Nachbarn transparenter Pixel
+            for (let idx = 0; idx < w * h; idx++) {
+              if (visited[idx]) continue;
+              const p = idx * 4;
+              const minCh = Math.min(data[p], data[p + 1], data[p + 2]);
+              if (minCh < softThr) continue;
+              const x = idx % w;
+              const y = (idx - x) / w;
+              const touchesBg =
+                (x > 0 && visited[idx - 1]) ||
+                (x < w - 1 && visited[idx + 1]) ||
+                (y > 0 && visited[idx - w]) ||
+                (y < h - 1 && visited[idx + w]);
+              if (touchesBg) {
+                const factor = Math.max(0, Math.min(1, (thr - minCh) / (thr - softThr)));
+                data[p + 3] = Math.round(data[p + 3] * factor);
+              }
+            }
+
+            ctx.putImageData(imgData, 0, 0);
+            const outUrl = c.toDataURL('image/png');
+            cutoutCache.set(key, outUrl);
+            return outUrl;
+          } catch (e) {
+            return origSrc;
+          }
+        }
+
         function maybeSnapAutoAspect(imgEl) {
           const itemEl = imgEl.closest('.canvas-item');
           if (!itemEl || !imgEl.naturalWidth || !imgEl.naturalHeight) return;
@@ -380,6 +468,11 @@
               itemEl.style.height = raw.canvas.h + 'px';
               scheduleBoardSave(folderId);
             }
+          }
+          if (raw && raw.canvas && raw.canvas.removeWhiteBg && !imgEl.dataset.cutoutApplied) {
+            imgEl.dataset.origSrc = imgEl.src;
+            imgEl.dataset.cutoutApplied = '1';
+            imgEl.src = createCutoutDataUrl(imgEl, raw.canvas.bgTolerance || 26);
           }
           updatePaletteBar();
         }
@@ -517,6 +610,44 @@
           ];
         }
 
+        document.getElementById('canvasSelectAllBtn').addEventListener('click', () => {
+          state.selectedCanvasIds = new Set(getAllBoxEntries().map((e) => e.obj.id));
+          renderCanvasView(container, statsEl, folderId);
+        });
+        const deselectAllBtn = document.getElementById('canvasDeselectAllBtn');
+        if (deselectAllBtn) deselectAllBtn.addEventListener('click', () => {
+          state.selectedCanvasIds.clear();
+          renderCanvasView(container, statsEl, folderId);
+        });
+
+        if (!window._canvasSelectAllKeyBound) {
+          window._canvasSelectAllKeyBound = true;
+          document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a' && state.activeView === 'canvas' && !state.quickView) {
+              const tag = document.activeElement ? document.activeElement.tagName : '';
+              if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+              const fc = state.folderContents[state.activeFolderId];
+              if (!fc) return;
+              e.preventDefault();
+              const ids = [
+                ...(fc.board.items || []).filter((it) => !it.canvasHidden).map((it) => it.id),
+                ...(fc.board.canvasElements || []).map((el) => el.id)
+              ];
+              state.selectedCanvasIds = new Set(ids);
+              renderMainView();
+            }
+          });
+        }
+
+        const selRemoveBgBtn = document.getElementById('selRemoveBgBtn');
+        if (selRemoveBgBtn) selRemoveBgBtn.addEventListener('click', () => {
+          const selItems = visualItems.filter((it) => state.selectedCanvasIds.has(it.id));
+          const allRemoved = selItems.every((it) => !!it.canvas.removeWhiteBg);
+          selItems.forEach((it) => { it.canvas.removeWhiteBg = !allRemoved; });
+          scheduleBoardSave(folderId);
+          renderCanvasView(container, statsEl, folderId);
+        });
+
         document.querySelectorAll('#canvasSelectionBar [data-sel-shape]').forEach((btn) => {
           btn.addEventListener('click', () => {
             const shape = btn.getAttribute('data-sel-shape');
@@ -600,6 +731,7 @@
             delete it.canvas.cropX;
             delete it.canvas.cropY;
             delete it.canvas.cropZoom;
+            delete it.canvas.removeWhiteBg;
             const imgEl = stage.querySelector(`.canvas-item[data-canvas-id="${it.id}"] img`);
             if (imgEl && imgEl.naturalWidth > 0 && imgEl.naturalHeight > 0) {
               it.canvas.h = Math.max(60, Math.round(it.canvas.w * (imgEl.naturalHeight / imgEl.naturalWidth)));
@@ -1161,7 +1293,8 @@
             const align = e.obj.textAlign || 'center';
             ctx.textAlign = align;
             ctx.textBaseline = 'middle';
-            const tx = align === 'left' ? x + 12 : (align === 'right' ? x + bw - 12 : x + bw / 2);
+            const padX = e.obj.shape === 'circle' ? Math.round(bw * 0.14) : 12;
+            const tx = align === 'left' ? x + padX : (align === 'right' ? x + bw - padX : x + bw / 2);
             const lines = String(e.obj.text || '').split('\n');
             const lh = fs * 1.18;
             const startY = y + bh / 2 - ((lines.length - 1) * lh) / 2;
