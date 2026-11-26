@@ -1172,11 +1172,22 @@
       align-self: center;
     }
 
+    .canvas-el-palette.vertical {
+      flex-direction: column;
+    }
+
+    .canvas-el-palette.vertical.circle .canvas-el-swatch {
+      width: auto;
+      height: auto;
+      max-width: 100%;
+    }
+
     .canvas-selection-bar {
       display: flex;
       align-items: center;
       gap: 6px;
       flex-wrap: wrap;
+      min-height: 44px;
       padding: 6px 12px;
       background: var(--card-bg);
       border-bottom: 1px solid var(--border-color);
