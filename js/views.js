@@ -397,8 +397,11 @@
         document.getElementById('openRaindropImportBtn').addEventListener('click', () => {
           document.getElementById('raindropCsvInput').value = '';
           document.getElementById('raindropCsvSummary').textContent = 'Noch keine Datei ausgewählt.';
+          document.getElementById('raindropZipImagesInput').value = '';
+          document.getElementById('raindropZipImagesSummary').textContent = 'Optional: Alle entpackten Bilder aus dem Raindrop-ZIP-Ordner markieren – werden automatisch zugeordnet und in Drive gespeichert.';
           document.getElementById('startRaindropImportBtn').disabled = true;
           state.parsedRaindropRows = null;
+          state.raindropLocalImages = new Map();
           openModal('raindropImportModal');
         });
         document.getElementById('gallerySortSelect').addEventListener('change', (e) => {
@@ -1039,6 +1042,71 @@
         return created.id;
       }
 
+      function normalizeImageKey(name) {
+        if (!name) return '';
+        let base = String(name).split(/[\\/]/).pop().split(/[?#]/)[0].trim();
+        try { base = decodeURIComponent(base); } catch (e) {}
+        return base.toLowerCase().replace(/[^a-z0-9.]+/g, '');
+      }
+
+      function findMatchingZipImage(row, coverUrl) {
+        const map = state.raindropLocalImages;
+        if (!map || map.size === 0) return null;
+        const candidates = [];
+        if (row.title) candidates.push(row.title);
+        if (coverUrl) {
+          try { candidates.push(new URL(coverUrl).pathname.split('/').pop()); } catch (e) { candidates.push(coverUrl); }
+        }
+        if (row.url) {
+          try { candidates.push(new URL(row.url).pathname.split('/').pop()); } catch (e) {}
+        }
+        for (const cand of candidates) {
+          const exact = String(cand || '').split(/[\\/]/).pop().split(/[?#]/)[0].trim().toLowerCase();
+          if (exact && map.has(exact)) return map.get(exact);
+          const norm = normalizeImageKey(cand);
+          if (norm && map.has(norm)) return map.get(norm);
+        }
+        return null;
+      }
+
+      async function uploadRaindropImageBlob(blob, filenameHint, rowId, targetFolderId, fc) {
+        if (state.mode === 'demo') {
+          const localDataUrl = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.readAsDataURL(blob);
+          });
+          return { driveFileId: '', localDataUrl };
+        }
+        if (state.mode === 'drive') {
+          const existingDriveImg = rowId ? (fc.driveFiles || []).find((df) => df.name.startsWith(`rd-${rowId}.`)) : null;
+          if (existingDriveImg) return { driveFileId: existingDriveImg.id, localDataUrl: '' };
+          const mime = blob.type && blob.type.startsWith('image/') ? blob.type : 'image/jpeg';
+          const extFromHint = (filenameHint || '').split('.').pop().toLowerCase();
+          const ext = /^(jpe?g|png|webp|gif)$/.test(extFromHint) ? extFromHint : (mime.split('/')[1] || 'jpg').split(';')[0];
+          const fname = `rd-${rowId || Date.now()}.${ext}`;
+          const up = await DriveAdapter.uploadMultipart(targetFolderId, fname, mime, blob);
+          fc.driveFiles.push(up);
+          return { driveFileId: up.id, localDataUrl: '' };
+        }
+        return { driveFileId: '', localDataUrl: '' };
+      }
+
+      document.getElementById('raindropZipImagesInput').addEventListener('change', (e) => {
+        const files = Array.from(e.target.files || []);
+        const map = new Map();
+        for (const f of files) {
+          const exact = f.name.toLowerCase();
+          if (!map.has(exact)) map.set(exact, f);
+          const norm = normalizeImageKey(f.name);
+          if (norm && !map.has(norm)) map.set(norm, f);
+        }
+        state.raindropLocalImages = map;
+        document.getElementById('raindropZipImagesSummary').textContent = files.length > 0
+          ? `✅ ${files.length} lokale Bilder bereit zum Abgleich`
+          : 'Optional: Alle entpackten Bilder aus dem Raindrop-ZIP-Ordner markieren – werden automatisch zugeordnet und in Drive gespeichert.';
+      });
+
       document.getElementById('raindropCsvInput').addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -1100,6 +1168,9 @@
             : [coverUrl].filter(Boolean);
           const fallbackPreviewUrl = isRaindropFile ? (url || coverUrl) : (coverUrl || '');
 
+          const localZipFile = findMatchingZipImage(row, coverUrl);
+          const existingDriveImg = row.id ? (fc.driveFiles || []).find((df) => df.name.startsWith(`rd-${row.id}.`)) : null;
+
           const existingDup = (fc.board.items || []).find((it) =>
             (row.id && it.raindropId === row.id) ||
             (url && (it.url === url || it.sourceUrl === url)) ||
@@ -1108,17 +1179,28 @@
           if (existingDup) {
             let fixed = false;
             if (row.id && !existingDup.raindropId) { existingDup.raindropId = row.id; fixed = true; }
-            if (isRaindropFile && existingDup.type !== 'image') { existingDup.type = 'image'; fixed = true; }
-            if (isRaindropFile && !existingDup.driveFileId && existingDup.previewImageUrl !== fallbackPreviewUrl) {
-              existingDup.previewImageUrl = fallbackPreviewUrl;
-              fixed = true;
+            if ((isRaindropFile || localZipFile) && existingDup.type !== 'image') { existingDup.type = 'image'; fixed = true; }
+            if (!existingDup.driveFileId && !existingDup.localDataUrl) {
+              if (existingDriveImg) {
+                existingDup.driveFileId = existingDriveImg.id;
+                existingDup.previewImageUrl = '';
+                fixed = true;
+              } else if (localZipFile) {
+                const upRes = await uploadRaindropImageBlob(localZipFile, localZipFile.name, row.id, targetFolderId, fc);
+                if (upRes.driveFileId) existingDup.driveFileId = upRes.driveFileId;
+                if (upRes.localDataUrl) existingDup.localDataUrl = upRes.localDataUrl;
+                existingDup.previewImageUrl = '';
+                existingDup.url = '';
+                fixed = true;
+              } else if (isRaindropFile && existingDup.previewImageUrl !== fallbackPreviewUrl) {
+                existingDup.previewImageUrl = fallbackPreviewUrl;
+                fixed = true;
+              }
             }
             if (fixed) importedCount++; else skippedCount++;
             continue;
           }
 
-          // Prüfen, ob das Bild (rd-<id>.*) schon physisch in Drive liegt
-          const existingDriveImg = row.id ? (fc.driveFiles || []).find((df) => df.name.startsWith(`rd-${row.id}.`)) : null;
           let driveFileId = existingDriveImg ? existingDriveImg.id : '';
           let localDataUrl = '';
 
@@ -1134,7 +1216,13 @@
           const allowedMap = new Map(state.globalTags.map((t) => [t.toLowerCase(), t]));
           const finalTags = rawTags.map((t) => allowedMap.get(t.toLowerCase())).filter(Boolean);
 
-          if (!driveFileId && uploadImgs && fetchCandidates.length > 0) {
+          if (!driveFileId && localZipFile) {
+            const upRes = await uploadRaindropImageBlob(localZipFile, localZipFile.name, row.id, targetFolderId, fc);
+            driveFileId = upRes.driveFileId;
+            localDataUrl = upRes.localDataUrl;
+          }
+
+          if (!driveFileId && !localDataUrl && uploadImgs && fetchCandidates.length > 0) {
             for (const cand of fetchCandidates) {
               // Raindrop-Domains blockieren Browser-fetch() per CORS; direkt als previewImageUrl nutzen
               if (/^https?:\/\/(api|up)\.raindrop\.io\//i.test(cand)) continue;
@@ -1143,19 +1231,9 @@
                 if (res.ok) {
                   const blob = await res.blob();
                   if (blob.type.startsWith('image/')) {
-                    if (state.mode === 'demo') {
-                      localDataUrl = await new Promise((resolve) => {
-                        const reader = new FileReader();
-                        reader.onload = () => resolve(reader.result);
-                        reader.readAsDataURL(blob);
-                      });
-                    } else if (state.mode === 'drive') {
-                      const ext = (blob.type.split('/')[1] || 'jpg').split(';')[0];
-                      const fname = `rd-${row.id || Date.now()}.${ext}`;
-                      const up = await DriveAdapter.uploadMultipart(targetFolderId, fname, blob.type, blob);
-                      driveFileId = up.id;
-                      fc.driveFiles.push(up);
-                    }
+                    const upRes = await uploadRaindropImageBlob(blob, '', row.id, targetFolderId, fc);
+                    driveFileId = upRes.driveFileId;
+                    localDataUrl = upRes.localDataUrl;
                     break;
                   }
                 }
@@ -1173,7 +1251,7 @@
             type: finalType,
             driveFileId: driveFileId || undefined,
             localDataUrl: localDataUrl || undefined,
-            url: isRaindropFile ? '' : url,
+            url: (isRaindropFile || localZipFile) ? '' : url,
             sourceUrl: url,
             previewImageUrl: (!driveFileId && !localDataUrl) ? fallbackPreviewUrl : '',
             title,
