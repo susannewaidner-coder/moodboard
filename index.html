@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>Moodboard &amp; Projekt-Planer — Google Drive</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <link rel="stylesheet" href="css/styles.css?v=1.0.30" />
+  <link rel="stylesheet" href="css/styles.css?v=1.0.31" />
 </head>
 </head>
 <body>
@@ -479,6 +479,93 @@
   </div>
 
   <!-- ======================================================================
+       MODAL: CANVAS TEXT-ELEMENT BEARBEITEN
+       ====================================================================== -->
+  <div id="canvasTextModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="canvasTextModalTitle">
+    <div class="modal-card" style="max-width:460px;">
+      <div class="modal-header">
+        <h2 id="canvasTextModalTitle" class="modal-title">🔤 Text / Badge bearbeiten</h2>
+        <button class="btn-icon" data-close-modal="canvasTextModal" type="button">✕</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="ctTextInput">Text</label>
+        <textarea id="ctTextInput" class="form-control" rows="2" placeholder="z. B. COASTAL oder Minimalist Design"></textarea>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <div class="form-group">
+          <label class="form-label" for="ctShapeSelect">Form</label>
+          <select id="ctShapeSelect" class="form-control">
+            <option value="none">Freier Text</option>
+            <option value="pill">Box / Pill</option>
+            <option value="circle">Kreis-Badge</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ctFontSelect">Schriftstil</label>
+          <select id="ctFontSelect" class="form-control">
+            <option value="sans">Modern (Sans)</option>
+            <option value="serif">Editorial (Serif)</option>
+            <option value="outline">Kontur (Outline)</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; align-items:end;">
+        <div class="form-group">
+          <label class="form-label" for="ctFontSizeInput">Größe (px)</label>
+          <input id="ctFontSizeInput" class="form-control" type="number" min="12" max="96" value="24" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ctColorInput">Textfarbe</label>
+          <input id="ctColorInput" class="form-control" type="color" value="#262927" style="height:38px; padding:2px;" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ctBgColorInput">Hintergrund</label>
+          <input id="ctBgColorInput" class="form-control" type="color" value="#262927" style="height:38px; padding:2px;" />
+        </div>
+      </div>
+      <label style="display:flex; align-items:center; gap:8px; font-size:0.84rem; cursor:pointer; margin-bottom:10px;">
+        <input id="ctWhiteFrameCb" type="checkbox" />
+        <span>⬜ Weißer Rand (ideal für Kreis-Badges)</span>
+      </label>
+      <div class="modal-footer">
+        <button class="btn" data-close-modal="canvasTextModal" type="button">Abbrechen</button>
+        <button id="ctSaveBtn" class="btn btn-primary" type="button">Übernehmen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================
+       MODAL: CANVAS FARBPALETTE BEARBEITEN
+       ====================================================================== -->
+  <div id="canvasPaletteModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="canvasPaletteModalTitle">
+    <div class="modal-card" style="max-width:460px;">
+      <div class="modal-header">
+        <h2 id="canvasPaletteModalTitle" class="modal-title">🎨 Farbpalette bearbeiten</h2>
+        <button class="btn-icon" data-close-modal="canvasPaletteModal" type="button">✕</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="cpShapeSelect">Feld-Form</label>
+        <select id="cpShapeSelect" class="form-control">
+          <option value="rect">Rechtecke</option>
+          <option value="circle">Kreise</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Farben</label>
+        <div id="cpSwatchesList" style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;"></div>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+        <button id="cpAddColorBtn" class="btn btn-sm" type="button">＋ Farbe</button>
+        <button id="cpFromBoardBtn" class="btn btn-oak btn-sm" type="button">✨ Aus Board-Bildern übernehmen</button>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" data-close-modal="canvasPaletteModal" type="button">Abbrechen</button>
+        <button id="cpSaveBtn" class="btn btn-primary" type="button">Übernehmen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================
        MODAL: UNIVERSELLES DIALOG-MODAL (ERSETZT ALERT / CONFIRM / PROMPT)
        ====================================================================== -->
   <!-- ======================================================================
@@ -539,9 +626,9 @@
     </div>
   </div>
 
-  <script defer src="js/core.js?v=1.0.30"></script>
-  <script defer src="js/views.js?v=1.0.30"></script>
-  <script defer src="js/canvas-home.js?v=1.0.30"></script>
-  <script defer src="js/ai-pdf.js?v=1.0.30"></script>
+  <script defer src="js/core.js?v=1.0.31"></script>
+  <script defer src="js/views.js?v=1.0.31"></script>
+  <script defer src="js/canvas-home.js?v=1.0.31"></script>
+  <script defer src="js/ai-pdf.js?v=1.0.31"></script>
 </body>
 </html>
