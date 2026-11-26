@@ -462,9 +462,7 @@
       function renderItemCardHtml(item, folderLabel = '') {
         const badge = item.type === 'image' ? 'Bild' : 'Bookmark';
         const tagsHtml = (item.tags || []).map((t) => `<span class="item-tag-pill">#${escapeHtml(t)}</span>`).join('');
-        const thumbSrc = item.type === 'image'
-          ? (item.localDataUrl || '')
-          : (item.previewImageUrl || '');
+        const thumbSrc = item.localDataUrl || item.previewImageUrl || '';
         const shop = item.shopping && item.shopping.enabled ? item.shopping : null;
         const shopStatus = (item.shopping && item.shopping.status) ? item.shopping.status : 'idea';
         const shopLabels = { idea: '💡 Idee', ordered: '📦 Bestellt', bought: '✅ Gekauft' };
@@ -1102,17 +1100,27 @@
             : [coverUrl].filter(Boolean);
           const fallbackPreviewUrl = isRaindropFile ? (url || coverUrl) : (coverUrl || '');
 
-          const existingDup = url ? (fc.board.items || []).find((it) => it.url === url || it.sourceUrl === url || (isRaindropFile && it.previewImageUrl === coverUrl)) : null;
+          const existingDup = (fc.board.items || []).find((it) =>
+            (row.id && it.raindropId === row.id) ||
+            (url && (it.url === url || it.sourceUrl === url)) ||
+            (isRaindropFile && it.previewImageUrl && (it.previewImageUrl === coverUrl || it.previewImageUrl === url))
+          );
           if (existingDup) {
-            // Bestehenden Raindrop-Import reparieren, falls bisher kaputte up.raindrop.io-URL drin stand
+            let fixed = false;
+            if (row.id && !existingDup.raindropId) { existingDup.raindropId = row.id; fixed = true; }
+            if (isRaindropFile && existingDup.type !== 'image') { existingDup.type = 'image'; fixed = true; }
             if (isRaindropFile && !existingDup.driveFileId && existingDup.previewImageUrl !== fallbackPreviewUrl) {
               existingDup.previewImageUrl = fallbackPreviewUrl;
-              importedCount++;
-            } else {
-              skippedCount++;
+              fixed = true;
             }
+            if (fixed) importedCount++; else skippedCount++;
             continue;
           }
+
+          // Prüfen, ob das Bild (rd-<id>.*) schon physisch in Drive liegt
+          const existingDriveImg = row.id ? (fc.driveFiles || []).find((df) => df.name.startsWith(`rd-${row.id}.`)) : null;
+          let driveFileId = existingDriveImg ? existingDriveImg.id : '';
+          let localDataUrl = '';
 
           // Tags verarbeiten
           const rawTags = (row.tags || '').split(',').map((t) => t.trim()).filter(Boolean);
@@ -1126,10 +1134,7 @@
           const allowedMap = new Map(state.globalTags.map((t) => [t.toLowerCase(), t]));
           const finalTags = rawTags.map((t) => allowedMap.get(t.toLowerCase())).filter(Boolean);
 
-          let driveFileId = '';
-          let localDataUrl = '';
-
-          if (uploadImgs && fetchCandidates.length > 0) {
+          if (!driveFileId && uploadImgs && fetchCandidates.length > 0) {
             for (const cand of fetchCandidates) {
               try {
                 const res = await fetch(cand);
@@ -1147,6 +1152,7 @@
                       const fname = `rd-${row.id || Date.now()}.${ext}`;
                       const up = await DriveAdapter.uploadMultipart(targetFolderId, fname, blob.type, blob);
                       driveFileId = up.id;
+                      fc.driveFiles.push(up);
                     }
                     break;
                   }
@@ -1157,14 +1163,16 @@
 
           const title = row.title || (isRaindropFile ? 'Raindrop Bild' : url);
           const note = [row.note, row.excerpt].filter((s) => s && s !== 'null').join(' — ');
+          const finalType = (driveFileId || localDataUrl || isRaindropFile) ? 'image' : 'bookmark';
 
           fc.board.items.push({
-            id: uid(driveFileId || localDataUrl ? 'img' : 'bm'),
-            type: (driveFileId || localDataUrl) ? 'image' : 'bookmark',
+            id: uid(finalType === 'image' ? 'img' : 'bm'),
+            raindropId: row.id || undefined,
+            type: finalType,
             driveFileId: driveFileId || undefined,
             localDataUrl: localDataUrl || undefined,
             url: isRaindropFile ? '' : url,
-            sourceUrl: isRaindropFile ? '' : url,
+            sourceUrl: url,
             previewImageUrl: (!driveFileId && !localDataUrl) ? fallbackPreviewUrl : '',
             title,
             note,
