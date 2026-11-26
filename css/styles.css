@@ -727,6 +727,29 @@
       align-items: center;
     }
 
+    .item-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 6px;
+    }
+
+    .item-tag-pill {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: var(--card-subtle);
+      border: 1px solid var(--border-color);
+      font-size: 0.69rem;
+      color: var(--text-secondary);
+    }
+
+    .gallery-grid:not(.list-mode) .item-meta {
+      border-top: 1px solid var(--border-color);
+      padding-top: 8px;
+      margin-top: 8px;
+    }
+
     .doc-icon-box {
       font-size: 2rem;
       color: var(--accent-oak);
