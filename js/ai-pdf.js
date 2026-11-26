@@ -249,7 +249,7 @@
       async function runAiScanForFolder(folderId) {
         const content = state.folderContents[folderId];
         if (!content) return;
-        const images = (content.board.items || []).filter((it) => it.type === 'image');
+        const images = (content.board.items || []).map((it) => resolveBoardItem(it, folderId)).filter((it) => it && it.type === 'image');
         if (images.length === 0) {
           await uiAlert('Keine eigenen Bilder in diesem Ordner vorhanden.');
           return;
@@ -421,7 +421,7 @@
           }
 
           // Nummerierte Bilder im 2-Spalten-Raster (unverzerrt + sauber umbrochen)
-          const items = content.board.items || [];
+          const items = (content.board.items || []).map((it) => resolveBoardItem(it, folderId)).filter(Boolean);
           const maxBoxW = 84;
           const maxBoxH = 54;
 
@@ -565,6 +565,24 @@
       document.getElementById('newGlobalTagInput').addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); addGlobalTagFromInput(); }
       });
+
+      async function addGlobalLocationFromInput() {
+        const inp = document.getElementById('newGlobalLocationInput');
+        const val = inp.value.trim();
+        if (!val) return;
+        if (!state.globalLocations.some((l) => l.toLowerCase() === val.toLowerCase())) {
+          state.globalLocations.push(val);
+          await saveGlobalLocations();
+          renderGlobalLocationsManager();
+          renderMainView();
+        }
+        inp.value = '';
+      }
+
+      document.getElementById('addGlobalLocationBtn').addEventListener('click', addGlobalLocationFromInput);
+      document.getElementById('newGlobalLocationInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); addGlobalLocationFromInput(); }
+      });
       document.getElementById('resetDefaultTagsBtn').addEventListener('click', async () => {
         if (!(await uiConfirm('Tag-Liste durch die aktuelle Standard-Liste ersetzen?', 'Standard-Tags laden', 'Ersetzen'))) return;
         state.globalTags = ['Basteln', 'Material', 'Deko', 'Inspiration', 'Weihnachten', 'Dekoobjekt', 'Verpackung', 'Möbel', 'Tischdeko', 'Trockenblume', 'Streudeko', 'Karte', 'Ostern', 'Christbaum', 'Vase', 'Kuchen', 'Rezept', 'Winter', 'Dekobasis', 'Kerzenhalter', 'Outdoor', 'Kerze', 'Plätzchen', 'Sommer', 'Frühling', 'Herbst', 'Pflanzen'];
@@ -578,6 +596,11 @@
         if (state.tagDropdownOpen) {
           state.tagDropdownOpen = false;
           const pop = document.getElementById('tagFilterPopover');
+          if (pop) pop.classList.add('hidden');
+        }
+        if (state.locationDropdownOpen) {
+          state.locationDropdownOpen = false;
+          const pop = document.getElementById('locationFilterPopover');
           if (pop) pop.classList.add('hidden');
         }
       });
