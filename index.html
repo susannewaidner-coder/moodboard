@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>Moodboard &amp; Projekt-Planer — Google Drive</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <link rel="stylesheet" href="css/styles.css?v=1.0.21" />
+  <link rel="stylesheet" href="css/styles.css?v=1.0.22" />
 </head>
 </head>
 <body>
@@ -220,8 +220,8 @@
 
       <div class="form-group">
         <label class="form-label">Tags (Mehrfachauswahl aus deiner Tag-Liste)</label>
-        <div id="itemTagPicker" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px;"></div>
-        <div class="form-hint">Neue Tags kannst du in der Galerie über „🏷️ Tags verwalten“ anlegen.</div>
+        <div id="itemTagPicker" class="tag-picker-box"></div>
+        <div class="form-hint">Neue Tags kannst du in der Galerie über „⚙️ Tags“ anlegen.</div>
       </div>
 
       <div style="border-top:1px solid var(--border-color); padding-top:12px; margin-top:12px;">
@@ -243,7 +243,7 @@
             <select id="itemShopStatus" class="form-control">
               <option value="idea">Idee</option>
               <option value="ordered">Bestellt</option>
-              <option value="bought">Gekauft</option>
+              <option value="bought">Vorhanden</option>
             </select>
           </div>
         </div>
@@ -437,6 +437,27 @@
   </div>
 
   <!-- ======================================================================
+       MODAL: ZIELORDNER WÄHLEN (ORDNER / BULK-AKTIONEN)
+       ====================================================================== -->
+  <div id="folderSelectModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="folderSelectTitle">
+    <div class="modal-card" style="max-width:460px;">
+      <div class="modal-header">
+        <h2 id="folderSelectTitle" class="modal-title">Zielordner wählen</h2>
+        <button class="btn-icon" data-close-modal="folderSelectModal" type="button">✕</button>
+      </div>
+      <p id="folderSelectDesc" style="font-size:0.84rem; color:var(--text-secondary); margin-top:0;"></p>
+      <div class="form-group">
+        <label class="form-label" for="folderSelectDropdown">Ziel</label>
+        <select id="folderSelectDropdown" class="form-control"></select>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" data-close-modal="folderSelectModal" type="button">Abbrechen</button>
+        <button id="folderSelectConfirmBtn" class="btn btn-primary" type="button">Übernehmen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================
        MODAL: UNIVERSELLES DIALOG-MODAL (ERSETZT ALERT / CONFIRM / PROMPT)
        ====================================================================== -->
   <!-- ======================================================================
@@ -497,9 +518,9 @@
     </div>
   </div>
 
-  <script defer src="js/core.js?v=1.0.21"></script>
-  <script defer src="js/views.js?v=1.0.21"></script>
-  <script defer src="js/canvas-home.js?v=1.0.21"></script>
-  <script defer src="js/ai-pdf.js?v=1.0.21"></script>
+  <script defer src="js/core.js?v=1.0.22"></script>
+  <script defer src="js/views.js?v=1.0.22"></script>
+  <script defer src="js/canvas-home.js?v=1.0.22"></script>
+  <script defer src="js/ai-pdf.js?v=1.0.22"></script>
 </body>
 </html>
