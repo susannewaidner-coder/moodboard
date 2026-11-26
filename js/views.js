@@ -371,6 +371,7 @@
               </select>
 
               <button id="manageTagsBtn" class="btn btn-sm" type="button" title="Tag-Liste verwalten">⚙️ Tags</button>
+              <button id="openRaindropImportBtn" class="btn btn-sm" type="button" title="Raindrop CSV in diesen Ordner importieren">📥 Import</button>
             </div>
 
             ${state.activeTagFilters.size > 0 ? `
@@ -393,6 +394,13 @@
         `;
 
         document.getElementById('manageTagsBtn').addEventListener('click', openTagsManagerModal);
+        document.getElementById('openRaindropImportBtn').addEventListener('click', () => {
+          document.getElementById('raindropCsvInput').value = '';
+          document.getElementById('raindropCsvSummary').textContent = 'Noch keine Datei ausgewählt.';
+          document.getElementById('startRaindropImportBtn').disabled = true;
+          state.parsedRaindropRows = null;
+          openModal('raindropImportModal');
+        });
         document.getElementById('gallerySortSelect').addEventListener('change', (e) => {
           state.gallerySort = e.target.value;
           renderGalleryView(container, statsEl, folderId);
@@ -967,6 +975,197 @@
       document.getElementById('itemPreviewInput').addEventListener('input', updateBookmarkPreviewThumb);
 
       document.getElementById('addBookmarkBtn').addEventListener('click', () => openItemModal(null));
+
+      /* ========================================================================
+         12b. RAINDROP CSV IMPORTER
+         ======================================================================== */
+      function parseCsvText(text) {
+        const rows = [];
+        let curRow = [];
+        let curVal = '';
+        let inQuotes = false;
+        const clean = text.replace(/^\uFEFF/, '');
+        for (let i = 0; i < clean.length; i++) {
+          const ch = clean[i];
+          const next = clean[i + 1];
+          if (inQuotes) {
+            if (ch === '"' && next === '"') { curVal += '"'; i++; }
+            else if (ch === '"') { inQuotes = false; }
+            else { curVal += ch; }
+          } else {
+            if (ch === '"') { inQuotes = true; }
+            else if (ch === ',') { curRow.push(curVal); curVal = ''; }
+            else if (ch === '\r' && next === '\n') { curRow.push(curVal); rows.push(curRow); curRow = []; curVal = ''; i++; }
+            else if (ch === '\n' || ch === '\r') { curRow.push(curVal); rows.push(curRow); curRow = []; curVal = ''; }
+            else { curVal += ch; }
+          }
+        }
+        if (curVal.length > 0 || curRow.length > 0) {
+          curRow.push(curVal);
+          rows.push(curRow);
+        }
+        if (rows.length < 2) return [];
+        const headers = rows[0].map((h) => h.trim().toLowerCase());
+        return rows.slice(1)
+          .filter((r) => r.some((cell) => cell.trim() !== ''))
+          .map((r) => {
+            const obj = {};
+            headers.forEach((h, idx) => { obj[h] = (r[idx] || '').trim(); });
+            return obj;
+          });
+      }
+
+      function unwrapRaindropCover(coverUrl) {
+        if (!coverUrl) return '';
+        const prefix = 'https://rdl.ink/render/';
+        if (coverUrl.startsWith(prefix)) {
+          try { return decodeURIComponent(coverUrl.slice(prefix.length)); } catch (e) { return coverUrl; }
+        }
+        return coverUrl;
+      }
+
+      async function getOrCreateSubfolder(parentId, name) {
+        const existing = state.folders.find((f) => (f.parents || []).includes(parentId) && f.name.toLowerCase() === name.toLowerCase());
+        if (existing) return existing.id;
+        if (state.mode === 'demo') {
+          const demo = DemoAdapter.load();
+          const newF = { id: uid('demo-f'), name, parents: [parentId] };
+          demo.folders.push(newF);
+          demo.boards[newF.id] = createDefaultBoard(name);
+          DemoAdapter.save(demo);
+          state.folders = demo.folders;
+          return newF.id;
+        }
+        const created = await DriveAdapter.createFolder(parentId, name);
+        state.folders.push(created);
+        return created.id;
+      }
+
+      document.getElementById('raindropCsvInput').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const text = await file.text();
+        const rows = parseCsvText(text);
+        state.parsedRaindropRows = rows;
+        const folders = Array.from(new Set(rows.map((r) => r.folder).filter(Boolean)));
+        document.getElementById('raindropCsvSummary').textContent = rows.length > 0
+          ? `✅ ${rows.length} Einträge erkannt (${folders.length} Ordner-Pfade)`
+          : '⚠️ Keine gültigen Einträge gefunden.';
+        document.getElementById('startRaindropImportBtn').disabled = rows.length === 0;
+      });
+
+      document.getElementById('startRaindropImportBtn').addEventListener('click', async () => {
+        const rows = state.parsedRaindropRows || [];
+        if (!state.activeFolderId || rows.length === 0) return;
+
+        const createSubs = document.getElementById('raindropCreateSubfoldersCb').checked;
+        const uploadImgs = document.getElementById('raindropUploadImagesCb').checked;
+        const importTags = document.getElementById('raindropImportTagsCb').checked;
+
+        closeModal('raindropImportModal');
+        showSyncStatus(`Importiere ${rows.length} Raindrop-Einträge…`, true);
+
+        // Gemeinsames Ordner-Präfix ermitteln (z. B. "Aktuelle Projekte / Weihnachten / Deko / Advent")
+        const folderPartsList = rows.map((r) => (r.folder || '').split('/').map((s) => s.trim()).filter(Boolean)).filter((p) => p.length > 0);
+        let commonLen = 0;
+        if (folderPartsList.length > 0) {
+          const minLen = Math.min(...folderPartsList.map((p) => p.length));
+          while (commonLen < minLen && folderPartsList.every((p) => p[commonLen] === folderPartsList[0][commonLen])) {
+            commonLen++;
+          }
+        }
+
+        const touchedFolders = new Set([state.activeFolderId]);
+        let importedCount = 0;
+        let skippedCount = 0;
+
+        for (let i = 0; i < rows.length; i++) {
+          const row = rows[i];
+          showSyncStatus(`Importiere ${i + 1}/${rows.length}…`, true);
+
+          let targetFolderId = state.activeFolderId;
+          if (createSubs && row.folder) {
+            const parts = row.folder.split('/').map((s) => s.trim()).filter(Boolean).slice(commonLen);
+            for (const pName of parts) {
+              targetFolderId = await getOrCreateSubfolder(targetFolderId, pName);
+            }
+          }
+          await ensureFoldersLoaded([targetFolderId]);
+          touchedFolders.add(targetFolderId);
+
+          const fc = state.folderContents[targetFolderId];
+          const url = row.url || '';
+          const coverUrl = unwrapRaindropCover(row.cover || '');
+          const isDup = url && (fc.board.items || []).some((it) => it.url === url || it.sourceUrl === url);
+          if (isDup) { skippedCount++; continue; }
+
+          // Tags verarbeiten
+          const rawTags = (row.tags || '').split(',').map((t) => t.trim()).filter(Boolean);
+          if (importTags) {
+            for (const t of rawTags) {
+              if (!state.globalTags.some((g) => g.toLowerCase() === t.toLowerCase())) {
+                state.globalTags.push(t);
+              }
+            }
+          }
+          const allowedMap = new Map(state.globalTags.map((t) => [t.toLowerCase(), t]));
+          const finalTags = rawTags.map((t) => allowedMap.get(t.toLowerCase())).filter(Boolean);
+
+          const isRaindropFile = /api\.raindrop\.io\/v2\/raindrop\/\d+\/file/i.test(url) || /\.(jpe?g|png|webp|gif)(\?|$)/i.test(url);
+          const imgCandidate = coverUrl || (isRaindropFile ? url : '');
+          let driveFileId = '';
+          let localDataUrl = '';
+
+          if (uploadImgs && imgCandidate) {
+            try {
+              const res = await fetch(imgCandidate);
+              if (res.ok) {
+                const blob = await res.blob();
+                if (blob.type.startsWith('image/')) {
+                  if (state.mode === 'demo') {
+                    localDataUrl = await new Promise((resolve) => {
+                      const reader = new FileReader();
+                      reader.onload = () => resolve(reader.result);
+                      reader.readAsDataURL(blob);
+                    });
+                  } else if (state.mode === 'drive') {
+                    const ext = (blob.type.split('/')[1] || 'jpg').split(';')[0];
+                    const fname = `rd-${row.id || Date.now()}.${ext}`;
+                    const up = await DriveAdapter.uploadMultipart(targetFolderId, fname, blob.type, blob);
+                    driveFileId = up.id;
+                  }
+                }
+              }
+            } catch (e) { /* CORS-geschützt -> Fallback auf previewImageUrl */ }
+          }
+
+          const title = row.title || (isRaindropFile ? 'Raindrop Bild' : url);
+          const note = [row.note, row.excerpt].filter((s) => s && s !== 'null').join(' — ');
+
+          fc.board.items.push({
+            id: uid(driveFileId || localDataUrl ? 'img' : 'bm'),
+            type: (driveFileId || localDataUrl) ? 'image' : 'bookmark',
+            driveFileId: driveFileId || undefined,
+            localDataUrl: localDataUrl || undefined,
+            url: isRaindropFile ? '' : url,
+            sourceUrl: isRaindropFile ? '' : url,
+            previewImageUrl: (!driveFileId && !localDataUrl) ? imgCandidate : '',
+            title,
+            note,
+            tags: Array.from(new Set(finalTags))
+          });
+          importedCount++;
+        }
+
+        if (importTags) await saveGlobalTags();
+        for (const fId of touchedFolders) {
+          scheduleBoardSave(fId);
+        }
+        renderSidebar();
+        renderMainView();
+        showSyncStatus(`✅ ${importedCount} importiert (${skippedCount} übersprungen)`, true);
+        setTimeout(() => showSyncStatus('', false), 3200);
+      });
       document.getElementById('addDocBtn').addEventListener('click', createNewGoogleDoc);
 
       document.getElementById('saveItemBtn').addEventListener('click', () => {
