@@ -4,7 +4,7 @@
       /* ========================================================================
          1. KONFIGURATION & STATE
          ======================================================================== */
-      const APP_VERSION = 'v1.0.20';
+      const APP_VERSION = 'v1.0.21';
       const LS_KEYS = {
         clientId: 'mb_oauth_client_id',
         rootName: 'mb_root_folder_name',
@@ -59,10 +59,18 @@
         todoFilter: 'Alle',
         globalTags: ['Basteln', 'Material', 'Deko', 'Inspiration', 'Weihnachten', 'Dekoobjekt', 'Verpackung', 'Möbel', 'Tischdeko', 'Trockenblume', 'Streudeko', 'Karte', 'Ostern', 'Christbaum', 'Vase', 'Kuchen', 'Rezept', 'Winter', 'Dekobasis', 'Kerzenhalter', 'Outdoor', 'Kerze', 'Plätzchen', 'Sommer', 'Frühling', 'Herbst', 'Pflanzen'],
         tagsFileId: null,
+        globalLocations: ['Kiste 1, Arbeitszimmer', 'Regal links, Keller', 'Wohnzimmer-Schrank', 'Dachboden'],
+        locationsFileId: null,
+        inventoryRootId: null,
         activeTagFilters: new Set(),
+        activeLocationFilters: new Set(),
         editingItemTags: new Set(),
+        editingItemLocation: '',
         gallerySort: 'newest',
-        tagDropdownOpen: false
+        tagDropdownOpen: false,
+        locationDropdownOpen: false,
+        inventoryPickerSelected: new Set(),
+        inventoryPickerFolderId: null
       };
 
       /* ========================================================================
@@ -313,6 +321,18 @@
           return res.json();
         },
 
+        async moveFile(fileId, oldParentId, newParentId) {
+          const params = new URLSearchParams({
+            addParents: newParentId,
+            removeParents: oldParentId,
+            fields: 'id,name,parents'
+          });
+          const res = await this.apiFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?${params.toString()}`, {
+            method: 'PATCH'
+          });
+          return res.json();
+        },
+
         async trashFile(fileId) {
           await this.apiFetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
             method: 'PATCH',
@@ -486,7 +506,7 @@
       /* ========================================================================
          6. WORKSPACE & ORDNER LADEN + SPEICHERN (MIT KONFLIKTSCHUTZ)
          ======================================================================== */
-      async function loadGlobalTagsDrive() {
+      async function loadRootMetadataDrive() {
         if (!state.rootFolderId || state.mode !== 'drive') return;
         try {
           const files = await DriveAdapter.listFolderFiles(state.rootFolderId);
@@ -498,8 +518,150 @@
           } else {
             await saveGlobalTags();
           }
+
+          const locFile = files.find((f) => f.name === 'locations.json');
+          if (locFile) {
+            state.locationsFileId = locFile.id;
+            const data = await DriveAdapter.downloadJson(locFile.id);
+            if (Array.isArray(data.locations)) state.globalLocations = data.locations;
+          } else {
+            await saveGlobalLocations();
+          }
         } catch (e) {
-          console.warn('tags.json konnte nicht geladen werden:', e);
+          console.warn('Root-Metadaten konnten nicht geladen werden:', e);
+        }
+      }
+
+      async function saveGlobalLocations() {
+        if (state.mode === 'demo') {
+          const demo = DemoAdapter.load();
+          demo.globalLocations = state.globalLocations;
+          DemoAdapter.save(demo);
+          return;
+        }
+        if (state.mode !== 'drive' || !state.rootFolderId || !state.accessToken) return;
+        try {
+          const blob = new Blob([JSON.stringify({ locations: state.globalLocations }, null, 2)], { type: 'application/json' });
+          const saved = await DriveAdapter.uploadMultipart(state.rootFolderId, 'locations.json', 'application/json', blob, state.locationsFileId);
+          state.locationsFileId = saved.id;
+        } catch (e) {
+          console.warn('locations.json konnte nicht gespeichert werden:', e);
+        }
+      }
+
+      function renderGlobalLocationsManager() {
+        const listEl = document.getElementById('globalLocationsList');
+        if (!listEl) return;
+        if (state.globalLocations.length === 0) {
+          listEl.innerHTML = '<span style="font-size:0.84rem; color:var(--text-muted);">Noch keine Lagerorte angelegt.</span>';
+          return;
+        }
+        listEl.innerHTML = state.globalLocations.map((loc, idx) => `
+          <span class="meta-pill" style="padding-right:6px;">
+            <span>📍 ${escapeHtml(loc)}</span>
+            <button class="btn-icon" data-del-gloc="${idx}" type="button" style="width:20px; height:20px; font-size:0.7rem;" title="Lagerort löschen">✕</button>
+          </span>
+        `).join('');
+        listEl.querySelectorAll('[data-del-gloc]').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const idx = Number(btn.getAttribute('data-del-gloc'));
+            const removed = state.globalLocations[idx];
+            state.globalLocations.splice(idx, 1);
+            state.activeLocationFilters.delete(removed);
+            renderGlobalLocationsManager();
+            await saveGlobalLocations();
+            renderMainView();
+          });
+        });
+      }
+
+      function openLocationsManagerModal() {
+        renderGlobalLocationsManager();
+        openModal('locationsManagerModal');
+      }
+
+      function isInventoryFolder(folderId) {
+        if (!folderId || !state.inventoryRootId) return false;
+        let currId = folderId;
+        const visited = new Set();
+        while (currId && !visited.has(currId)) {
+          if (currId === state.inventoryRootId) return true;
+          visited.add(currId);
+          const f = state.folders.find((x) => x.id === currId);
+          currId = f && f.parents ? f.parents[0] : null;
+        }
+        return false;
+      }
+
+      function getInventoryFolders() {
+        if (!state.inventoryRootId) return [];
+        return state.folders.filter((f) => isInventoryFolder(f.id));
+      }
+
+      function resolveBoardItem(item, sourceFolderId = null) {
+        if (!item) return null;
+        if (item.type !== 'ref') {
+          return {
+            ...item,
+            isRef: false,
+            isMissingRef: false,
+            targetItem: item,
+            targetFolderId: sourceFolderId || state.activeFolderId,
+            refItem: null
+          };
+        }
+        const invContent = state.folderContents[item.refFolderId];
+        const orig = invContent ? (invContent.board.items || []).find((i) => i.id === item.refItemId) : null;
+        if (!orig) {
+          return {
+            ...item,
+            type: 'bookmark',
+            isRef: true,
+            isMissingRef: true,
+            title: item.title || '⚠️ Fehlendes Inventory-Element',
+            note: 'Das Original im Inventory wurde gelöscht oder verschoben.',
+            tags: item.tags || [],
+            location: '',
+            targetItem: null,
+            targetFolderId: item.refFolderId,
+            refItem: item
+          };
+        }
+        const origPrice = orig.shopping && orig.shopping.price ? Number(orig.shopping.price) : 0;
+        const refShop = item.shopping || { enabled: false, price: origPrice, quantity: 1, status: 'idea' };
+        const mergedPrice = (refShop.price !== undefined && refShop.price !== null && refShop.price !== '' && Number(refShop.price) > 0)
+          ? Number(refShop.price)
+          : origPrice;
+        return {
+          ...orig,
+          id: item.id,
+          canvas: item.canvas,
+          canvasHidden: item.canvasHidden,
+          shopping: {
+            enabled: !!refShop.enabled,
+            price: mergedPrice,
+            quantity: Math.max(1, Number(refShop.quantity) || 1),
+            status: refShop.status || 'idea'
+          },
+          isRef: true,
+          isMissingRef: false,
+          refFolderId: item.refFolderId,
+          refItemId: item.refItemId,
+          targetItem: orig,
+          targetFolderId: item.refFolderId,
+          refItem: item
+        };
+      }
+
+      async function preloadReferencedInventoryFolders(board) {
+        if (!board || !Array.isArray(board.items)) return;
+        const needed = Array.from(new Set(
+          board.items
+            .filter((it) => it.type === 'ref' && it.refFolderId && !state.folderContents[it.refFolderId])
+            .map((it) => it.refFolderId)
+        ));
+        if (needed.length > 0 && typeof ensureFoldersLoaded === 'function') {
+          await ensureFoldersLoaded(needed);
         }
       }
 
@@ -561,9 +723,16 @@
         try {
           const { rootName } = getSettings();
           state.rootFolderId = await DriveAdapter.ensureRootFolder(rootName);
-          await loadGlobalTagsDrive();
+          await loadRootMetadataDrive();
           state.folders = await DriveAdapter.listAllSubfolders(state.rootFolderId);
           state.expandedFolders.add(state.rootFolderId);
+
+          let invFolder = state.folders.find((f) => f.name === '_Inventory' && (f.parents || []).includes(state.rootFolderId));
+          if (!invFolder) {
+            invFolder = await DriveAdapter.createFolder(state.rootFolderId, '_Inventory');
+            state.folders.push(invFolder);
+          }
+          state.inventoryRootId = invFolder.id;
 
           const savedFolderId = localStorage.getItem(LS_KEYS.lastFolderId);
           const savedView = localStorage.getItem(LS_KEYS.lastView);
@@ -609,8 +778,17 @@
         document.getElementById('tokenExpiredBanner').classList.add('hidden');
         const demo = DemoAdapter.load();
         if (Array.isArray(demo.globalTags)) state.globalTags = demo.globalTags;
+        if (Array.isArray(demo.globalLocations)) state.globalLocations = demo.globalLocations;
         state.rootFolderId = demo.rootFolderId;
         state.folders = demo.folders;
+        let invFolder = state.folders.find((f) => f.name === '_Inventory' && (f.parents || []).includes(state.rootFolderId));
+        if (!invFolder) {
+          invFolder = { id: 'demo-inventory', name: '_Inventory', parents: [state.rootFolderId] };
+          state.folders.push(invFolder);
+          demo.boards[invFolder.id] = createDefaultBoard('Inventory');
+          DemoAdapter.save(demo);
+        }
+        state.inventoryRootId = invFolder.id;
         state.expandedFolders.add(demo.rootFolderId);
 
         const savedFolderId = localStorage.getItem(LS_KEYS.lastFolderId);
@@ -644,6 +822,7 @@
           const folder = demo.folders.find((f) => f.id === folderId);
           const board = demo.boards[folderId] || createDefaultBoard(folder?.name || 'Ordner');
           state.folderContents[folderId] = { board, boardFileId: null, modifiedTime: null, driveFiles: [] };
+          await preloadReferencedInventoryFolders(board);
           renderMainView();
           return;
         }
@@ -688,6 +867,7 @@
             }
           }
           if (addedNew) scheduleBoardSave(folderId);
+          await preloadReferencedInventoryFolders(board);
           renderMainView();
         } catch (err) {
           console.error(err);
