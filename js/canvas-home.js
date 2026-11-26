@@ -39,7 +39,26 @@
           });
       }
 
+      function bindHexColorPair(colorInp, hexInp, onApply) {
+        if (!colorInp || !hexInp) return;
+        colorInp.addEventListener('input', () => {
+          hexInp.value = colorInp.value.toUpperCase();
+          onApply(colorInp.value);
+        });
+        hexInp.addEventListener('input', () => {
+          let v = hexInp.value.trim();
+          if (v && !v.startsWith('#')) v = '#' + v;
+          if (/^#[0-9a-fA-F]{6}$/.test(v)) {
+            colorInp.value = v;
+            onApply(v);
+          }
+        });
+      }
+
       function renderCanvasView(container, statsEl, folderId) {
+        const oldVp = document.getElementById('canvasViewport');
+        const savedVpScroll = oldVp ? { left: oldVp.scrollLeft, top: oldVp.scrollTop } : null;
+        const savedWinY = window.scrollY;
         const content = state.folderContents[folderId];
         if (!Array.isArray(content.board.canvasElements)) content.board.canvasElements = [];
         const visualItems = (content.board.items || []).filter((it) => !it.canvasHidden);
@@ -142,7 +161,10 @@
                       <button class="btn btn-sm" data-bg-preset="#F6F2EA" type="button" title="Creme" style="width:24px; height:24px; padding:0; background:#F6F2EA;"></button>
                       <button class="btn btn-sm" data-bg-preset="#E3EAE3" type="button" title="Salbei" style="width:24px; height:24px; padding:0; background:#E3EAE3;"></button>
                       <button class="btn btn-sm" data-bg-preset="#1C201E" type="button" title="Dunkel" style="width:24px; height:24px; padding:0; background:#1C201E;"></button>
-                      <input id="canvasBgColorInput" type="color" value="${escapeHtml(bgColor || '#F8F7F4')}" title="Eigene Hintergrundfarbe" style="width:28px; height:24px; padding:0; border:1px solid var(--border-color); border-radius:4px; cursor:pointer;" />
+                      <div class="hex-color-pair">
+                        <input id="canvasBgColorInput" type="color" value="${escapeHtml(bgColor || '#F8F7F4')}" title="Eigene Hintergrundfarbe" />
+                        <input id="canvasBgColorHex" class="form-control hex-input" type="text" maxlength="7" value="${escapeHtml((bgColor || '#F8F7F4').toUpperCase())}" placeholder="#F8F7F4" />
+                      </div>
                     </div>
                     <div style="display:flex; gap:6px;">
                       <button id="canvasGridBtn" class="btn btn-sm ${showGrid ? '' : 'btn-oak'}" type="button" style="flex:1;">${showGrid ? 'Raster: An' : 'Raster: Aus'}</button>
@@ -169,13 +191,27 @@
           ${selectedList.length > 0 ? `
             <div id="canvasSelectionBar" class="canvas-selection-bar">
               <strong>${selectedList.length} ausgewählt:</strong>
-              ${firstSel && firstSel.kind === 'item' ? `
-                <button class="btn btn-sm" data-sel-shape="rect" type="button">▭ Rechteck</button>
-                <button class="btn btn-sm" data-sel-shape="rounded" type="button">▢ Rund</button>
-                <button class="btn btn-sm" data-sel-shape="circle" type="button">◯ Kreis</button>
-                <button class="btn btn-sm" id="selFrameToggleBtn" type="button">⬜ Weißer Rand</button>
-                <button class="btn btn-sm" id="selOrigRatioBtn" type="button" title="Passt Höhe exakt an das Bildformat an (kein Rand, kein Beschnitt)">📐 Original-Format</button>
-              ` : ''}
+              ${firstSel && firstSel.kind === 'item' ? (() => {
+                const fc = firstSel.box;
+                const fCol = fc.frameColor || (fc.frame === 'white' ? '#FFFFFF' : '');
+                return `
+                  <button class="btn btn-sm" data-sel-shape="rect" type="button">▭ Rechteck</button>
+                  <button class="btn btn-sm" data-sel-shape="rounded" type="button">▢ Rund</button>
+                  <button class="btn btn-sm" data-sel-shape="circle" type="button">◯ Kreis</button>
+                  <button class="btn btn-sm ${fCol ? 'btn-oak' : ''}" id="selFrameToggleBtn" type="button">⬜ Rand</button>
+                  <div class="hex-color-pair" title="Randfarbe">
+                    <input id="selFrameColorInput" type="color" value="${escapeHtml(fCol || '#FFFFFF')}" />
+                    <input id="selFrameColorHex" class="form-control hex-input" type="text" maxlength="7" value="${escapeHtml((fCol || '#FFFFFF').toUpperCase())}" placeholder="#FFFFFF" />
+                  </div>
+                  <button class="btn btn-sm" id="selOrigRatioBtn" type="button" title="Passt Höhe exakt an das Bildformat an (kein Rand, kein Beschnitt)">📐 Original-Format</button>
+                  <span style="display:inline-flex; align-items:center; gap:4px; margin-left:4px;" title="Bildausschnitt verschieben &amp; zoomen">
+                    <span>🔍</span>
+                    <input id="selCropX" type="range" min="0" max="100" value="${fc.cropX ?? 50}" style="width:48px;" title="Ausschnitt Links/Rechts" />
+                    <input id="selCropY" type="range" min="0" max="100" value="${fc.cropY ?? 50}" style="width:48px;" title="Ausschnitt Oben/Unten" />
+                    <input id="selCropZoom" type="range" min="1" max="2.5" step="0.05" value="${fc.cropZoom || 1}" style="width:52px;" title="Ausschnitt Zoom" />
+                  </span>
+                `;
+              })() : ''}
               ${firstSel && firstSel.kind === 'el' ? `
                 <button class="btn btn-sm" id="selEditElBtn" type="button">✏️ Bearbeiten</button>
               ` : ''}
@@ -198,14 +234,20 @@
                   let domain = '';
                   try { if (linkUrl) domain = new URL(linkUrl).hostname.replace(/^www\./, ''); } catch (e) {}
                   const shapeCls = c.shape === 'circle' ? 'shape-circle' : (c.shape === 'rounded' ? 'shape-rounded' : '');
-                  const frameCls = c.frame === 'white' ? 'frame-white' : '';
+                  const fCol = c.frameColor || (c.frame === 'white' ? '#FFFFFF' : '');
+                  const frameStyle = fCol ? `border:6px solid ${escapeHtml(fCol)}; box-shadow:var(--shadow-md);` : '';
+                  const itemFit = c.fitMode || fitMode;
+                  const cx = c.cropX ?? 50;
+                  const cy = c.cropY ?? 50;
+                  const cz = c.cropZoom || 1;
+                  const imgStyle = `object-position:${cx}% ${cy}%; transform:scale(${cz}); transform-origin:${cx}% ${cy}%;`;
                   return `
-                    <div class="canvas-item ${isSelected ? 'selected' : ''} ${fitMode === 'contain' ? 'fit-contain' : ''} ${shapeCls} ${frameCls}"
+                    <div class="canvas-item ${isSelected ? 'selected' : ''} ${itemFit === 'contain' ? 'fit-contain' : ''} ${shapeCls}"
                          data-canvas-id="${rawItem.id}"
                          data-canvas-kind="item"
-                         style="left:${c.x}px; top:${c.y}px; width:${c.w}px; height:${c.h}px; z-index:${c.z || 1};">
+                         style="left:${c.x}px; top:${c.y}px; width:${c.w}px; height:${c.h}px; z-index:${c.z || 1}; ${frameStyle}">
                       ${hasVisual
-                        ? `<img src="${escapeHtml(src)}" alt="${escapeHtml(item.title)}" data-drive-img="${item.driveFileId || ''}" />`
+                        ? `<img src="${escapeHtml(src)}" alt="${escapeHtml(item.title)}" data-drive-img="${item.driveFileId || ''}" style="${imgStyle}" />`
                         : `<div style="width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:12px; text-align:center; gap:6px; background:var(--card-bg);">
                              <span style="font-size:1.8rem;">🔗</span>
                              <strong style="font-size:0.82rem; color:var(--text-primary); display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;">${escapeHtml(item.title || 'Bookmark')}</strong>
@@ -262,6 +304,15 @@
         const viewport = document.getElementById('canvasViewport');
         const stage = document.getElementById('canvasStage');
         const paletteBar = document.getElementById('canvasPaletteBar');
+        if (savedVpScroll) {
+          viewport.scrollLeft = savedVpScroll.left;
+          viewport.scrollTop = savedVpScroll.top;
+          requestAnimationFrame(() => {
+            viewport.scrollLeft = savedVpScroll.left;
+            viewport.scrollTop = savedVpScroll.top;
+            window.scrollTo(window.scrollX, savedWinY);
+          });
+        }
 
         function updatePaletteBar() {
           const imgs = [];
@@ -396,9 +447,18 @@
         }
 
         document.getElementById('canvasFitBtn').addEventListener('click', () => {
-          const next = fitMode === 'contain' ? 'cover' : 'contain';
-          state.canvasFitMode = next;
-          saveCanvasSetting({ fitMode: next });
+          const selItems = visualItems.filter((it) => state.selectedCanvasIds.has(it.id));
+          if (selItems.length > 0) {
+            const allContain = selItems.every((it) => (it.canvas.fitMode || fitMode) === 'contain');
+            const next = allContain ? 'cover' : 'contain';
+            selItems.forEach((it) => { it.canvas.fitMode = next; });
+            scheduleBoardSave(folderId);
+          } else {
+            const next = fitMode === 'contain' ? 'cover' : 'contain';
+            state.canvasFitMode = next;
+            visualItems.forEach((it) => { if (it.canvas) delete it.canvas.fitMode; });
+            saveCanvasSetting({ fitMode: next });
+          }
           renderCanvasView(container, statsEl, folderId);
         });
 
@@ -452,10 +512,52 @@
         const selFrameBtn = document.getElementById('selFrameToggleBtn');
         if (selFrameBtn) selFrameBtn.addEventListener('click', () => {
           const selItems = visualItems.filter((it) => state.selectedCanvasIds.has(it.id));
-          const allFramed = selItems.every((it) => it.canvas.frame === 'white');
-          selItems.forEach((it) => { it.canvas.frame = allFramed ? '' : 'white'; });
+          const allFramed = selItems.every((it) => !!(it.canvas.frameColor || it.canvas.frame === 'white'));
+          selItems.forEach((it) => {
+            it.canvas.frameColor = allFramed ? '' : '#FFFFFF';
+            delete it.canvas.frame;
+          });
           scheduleBoardSave(folderId);
           renderCanvasView(container, statsEl, folderId);
+        });
+
+        bindHexColorPair(
+          document.getElementById('selFrameColorInput'),
+          document.getElementById('selFrameColorHex'),
+          (col) => {
+            visualItems.forEach((it) => {
+              if (!state.selectedCanvasIds.has(it.id)) return;
+              it.canvas.frameColor = col;
+              delete it.canvas.frame;
+              const el = stage.querySelector(`.canvas-item[data-canvas-id="${it.id}"]`);
+              if (el) { el.style.border = `6px solid ${col}`; el.style.boxShadow = 'var(--shadow-md)'; }
+            });
+            scheduleBoardSave(folderId);
+          }
+        );
+
+        function applyCropToSelected() {
+          const cx = Number(document.getElementById('selCropX')?.value ?? 50);
+          const cy = Number(document.getElementById('selCropY')?.value ?? 50);
+          const cz = Number(document.getElementById('selCropZoom')?.value ?? 1);
+          visualItems.forEach((it) => {
+            if (!state.selectedCanvasIds.has(it.id)) return;
+            it.canvas.cropX = cx;
+            it.canvas.cropY = cy;
+            it.canvas.cropZoom = cz;
+            const img = stage.querySelector(`.canvas-item[data-canvas-id="${it.id}"] img`);
+            if (img) {
+              img.style.objectPosition = `${cx}% ${cy}%`;
+              img.style.transform = `scale(${cz})`;
+              img.style.transformOrigin = `${cx}% ${cy}%`;
+            }
+          });
+        }
+        ['selCropX', 'selCropY', 'selCropZoom'].forEach((cid) => {
+          const inp = document.getElementById(cid);
+          if (!inp) return;
+          inp.addEventListener('input', applyCropToSelected);
+          inp.addEventListener('change', () => scheduleBoardSave(folderId));
         });
 
         const selOrigBtn = document.getElementById('selOrigRatioBtn');
@@ -487,25 +589,38 @@
           renderCanvasView(container, statsEl, folderId);
         });
 
-        const layerUpBtn = document.getElementById('canvasLayerUpBtn');
-        if (layerUpBtn) layerUpBtn.addEventListener('click', () => {
+        function stepLayerOrder(dir) {
           if (state.selectedCanvasIds.size === 0) return;
-          const all = getAllBoxEntries();
-          const maxZ = Math.max(1, ...all.map((e) => (e.box && e.box.z) || 1));
-          all.forEach((e) => { if (state.selectedCanvasIds.has(e.obj.id)) e.box.z = maxZ + 1; });
+          const sorted = getAllBoxEntries().sort((a, b) => (a.box.z || 1) - (b.box.z || 1));
+          sorted.forEach((e, idx) => { e.box.z = idx + 1; });
+          if (dir > 0) {
+            for (let i = sorted.length - 2; i >= 0; i--) {
+              if (state.selectedCanvasIds.has(sorted[i].obj.id) && !state.selectedCanvasIds.has(sorted[i + 1].obj.id)) {
+                const tmp = sorted[i].box.z;
+                sorted[i].box.z = sorted[i + 1].box.z;
+                sorted[i + 1].box.z = tmp;
+                [sorted[i], sorted[i + 1]] = [sorted[i + 1], sorted[i]];
+              }
+            }
+          } else {
+            for (let i = 1; i < sorted.length; i++) {
+              if (state.selectedCanvasIds.has(sorted[i].obj.id) && !state.selectedCanvasIds.has(sorted[i - 1].obj.id)) {
+                const tmp = sorted[i].box.z;
+                sorted[i].box.z = sorted[i - 1].box.z;
+                sorted[i - 1].box.z = tmp;
+                [sorted[i], sorted[i - 1]] = [sorted[i - 1], sorted[i]];
+              }
+            }
+          }
           scheduleBoardSave(folderId);
           renderCanvasView(container, statsEl, folderId);
-        });
+        }
+
+        const layerUpBtn = document.getElementById('canvasLayerUpBtn');
+        if (layerUpBtn) layerUpBtn.addEventListener('click', () => stepLayerOrder(1));
 
         const layerDownBtn = document.getElementById('canvasLayerDownBtn');
-        if (layerDownBtn) layerDownBtn.addEventListener('click', () => {
-          if (state.selectedCanvasIds.size === 0) return;
-          const all = getAllBoxEntries();
-          const minZ = Math.min(1, ...all.map((e) => (e.box && e.box.z) || 1));
-          all.forEach((e) => { if (state.selectedCanvasIds.has(e.obj.id)) e.box.z = Math.max(0, minZ - 1); });
-          scheduleBoardSave(folderId);
-          renderCanvasView(container, statsEl, folderId);
-        });
+        if (layerDownBtn) layerDownBtn.addEventListener('click', () => stepLayerOrder(-1));
 
         document.querySelectorAll('[data-bg-preset]').forEach((btn) => {
           btn.addEventListener('click', () => {
@@ -515,11 +630,14 @@
           });
         });
 
-        const bgColInput = document.getElementById('canvasBgColorInput');
-        if (bgColInput) bgColInput.addEventListener('input', (e) => {
-          saveCanvasSetting({ bgColor: e.target.value, bgMode: 'custom' });
-          viewport.style.backgroundColor = e.target.value;
-        });
+        bindHexColorPair(
+          document.getElementById('canvasBgColorInput'),
+          document.getElementById('canvasBgColorHex'),
+          (col) => {
+            saveCanvasSetting({ bgColor: col, bgMode: 'custom' });
+            viewport.style.backgroundColor = col;
+          }
+        );
 
         document.getElementById('canvasCollageBtn').addEventListener('click', () => {
           saveCanvasSetting({ collageMode: !collageMode });
@@ -659,12 +777,6 @@
           }
           state.selectedCanvasIds.add(id);
           itemEl.classList.add('selected');
-
-          // Nach vorne holen
-          const all = getAllBoxEntries();
-          const maxZ = Math.max(1, ...all.map((x) => (x.box && x.box.z) || 1));
-          box.z = maxZ + 1;
-          itemEl.style.zIndex = box.z;
           updatePaletteBar();
 
           if (state.canvasLocked) {
@@ -673,12 +785,9 @@
           }
 
           const isResize = e.target.hasAttribute('data-resize-handle');
-          const imgEl = itemEl.querySelector('img');
-          let aspectRatio = 0;
-          if (box.shape === 'circle') aspectRatio = 1;
-          else if (kind === 'item' && imgEl && imgEl.naturalWidth > 0 && imgEl.naturalHeight > 0) {
-            aspectRatio = imgEl.naturalHeight / imgEl.naturalWidth;
-          }
+          const aspectRatio = box.shape === 'circle'
+            ? 1
+            : (kind === 'item' ? ((box.h || 200) / Math.max(1, box.w || 200)) : 0);
 
           activeAction = {
             type: isResize ? 'resize' : 'drag',
@@ -739,8 +848,14 @@
           document.getElementById('ctShapeSelect').value = el.shape || 'none';
           document.getElementById('ctFontSelect').value = el.fontStyle || 'sans';
           document.getElementById('ctFontSizeInput').value = el.fontSize || 24;
-          document.getElementById('ctColorInput').value = el.color || '#262927';
-          document.getElementById('ctBgColorInput').value = el.bgColor || '#262927';
+          const colVal = (el.color || '#262927').toUpperCase();
+          const bgVal = (el.bgColor || '#262927').toUpperCase();
+          document.getElementById('ctColorInput').value = colVal;
+          document.getElementById('ctColorHex').value = colVal;
+          document.getElementById('ctBgColorInput').value = bgVal;
+          document.getElementById('ctBgColorHex').value = bgVal;
+          bindHexColorPair(document.getElementById('ctColorInput'), document.getElementById('ctColorHex'), () => {});
+          bindHexColorPair(document.getElementById('ctBgColorInput'), document.getElementById('ctBgColorHex'), () => {});
           document.getElementById('ctWhiteFrameCb').checked = !!el.frame;
           document.getElementById('ctSaveBtn').onclick = () => {
             el.text = document.getElementById('ctTextInput').value || 'Text';
@@ -766,13 +881,16 @@
           function renderSwatches() {
             const list = document.getElementById('cpSwatchesList');
             list.innerHTML = draftColors.map((hex, idx) => `
-              <div style="display:flex; align-items:center; gap:4px; background:var(--card-subtle); padding:4px 6px; border-radius:var(--radius-sm); border:1px solid var(--border-color);">
-                <input type="color" data-cp-idx="${idx}" value="${escapeHtml(hex)}" style="width:30px; height:28px; border:none; padding:0; cursor:pointer; background:transparent;" />
+              <div class="hex-color-pair" style="background:var(--card-subtle); padding:4px 6px; border-radius:var(--radius-sm); border:1px solid var(--border-color);">
+                <input type="color" data-cp-idx="${idx}" value="${escapeHtml(hex)}" />
+                <input type="text" class="form-control hex-input" data-cp-hex="${idx}" maxlength="7" value="${escapeHtml(hex.toUpperCase())}" />
                 ${draftColors.length > 2 ? `<button type="button" class="btn-icon" data-cp-del="${idx}" style="width:20px; height:20px; font-size:0.7rem;">✕</button>` : ''}
               </div>
             `).join('');
             list.querySelectorAll('[data-cp-idx]').forEach((inp) => {
-              inp.addEventListener('input', () => { draftColors[Number(inp.getAttribute('data-cp-idx'))] = inp.value; });
+              const idx = Number(inp.getAttribute('data-cp-idx'));
+              const hexInp = list.querySelector(`[data-cp-hex="${idx}"]`);
+              bindHexColorPair(inp, hexInp, (val) => { draftColors[idx] = val; });
             });
             list.querySelectorAll('[data-cp-del]').forEach((btn) => {
               btn.addEventListener('click', () => {
@@ -848,21 +966,28 @@
               ctx.roundRect(x, y, bw, bh, 12);
               ctx.clip();
             }
+            const itemFit = e.box.fitMode || fitMode;
             const ir = imgEl.naturalWidth / imgEl.naturalHeight;
             const br = bw / bh;
             let dw = bw, dh = bh, dx = x, dy = y;
-            if (fitMode === 'contain') {
+            if (itemFit === 'contain') {
               if (ir > br) { dh = bw / ir; dy = y + (bh - dh) / 2; }
               else { dw = bh * ir; dx = x + (bw - dw) / 2; }
             } else {
-              if (ir > br) { dw = bh * ir; dx = x - (dw - bw) / 2; }
-              else { dh = bw / ir; dy = y - (dh - bh) / 2; }
+              const cx = (e.box.cropX ?? 50) / 100;
+              const cy = (e.box.cropY ?? 50) / 100;
+              const cz = e.box.cropZoom || 1;
+              if (ir > br) { dw = bh * ir * cz; dh = bh * cz; }
+              else { dw = bw * cz; dh = (bw / ir) * cz; }
+              dx = x - (dw - bw) * cx;
+              dy = y - (dh - bh) * cy;
             }
             try { ctx.drawImage(imgEl, dx, dy, dw, dh); } catch (err) {}
             ctx.restore();
-            if (e.box.frame === 'white') {
+            const fCol = e.box.frameColor || (e.box.frame === 'white' ? '#FFFFFF' : '');
+            if (fCol) {
               ctx.save();
-              ctx.strokeStyle = '#FFFFFF';
+              ctx.strokeStyle = fCol;
               ctx.lineWidth = 6;
               if (e.box.shape === 'circle') {
                 ctx.beginPath();
