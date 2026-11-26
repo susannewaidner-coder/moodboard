@@ -1185,13 +1185,26 @@
     .canvas-selection-bar {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 8px;
       flex-wrap: wrap;
       min-height: 44px;
       padding: 6px 12px;
       background: var(--card-bg);
       border-bottom: 1px solid var(--border-color);
       font-size: 0.78rem;
+    }
+
+    .sel-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding-right: 8px;
+      border-right: 1px solid var(--border-color);
+    }
+
+    .sel-group:last-child {
+      border-right: none;
+      padding-right: 0;
     }
 
     .canvas-viewport.no-grid {
