@@ -480,6 +480,7 @@
               <div class="item-meta">
                 <span>${tagsHtml || (item.url || item.sourceUrl ? 'Link gespeichert' : '')}</span>
                 <div class="item-actions">
+                  <button class="btn-icon" data-toggle-canvas="${item.id}" type="button" title="${item.canvasHidden ? 'Auf Moodboard anzeigen' : 'Vom Moodboard ausblenden'}" style="${item.canvasHidden ? 'opacity:0.4;' : ''}">🎨</button>
                   <button class="btn-icon" data-toggle-shop="${item.id}" type="button" title="Auf Einkaufsliste setzen/entfernen" style="${shop ? 'color:var(--accent-fir); font-weight:700;' : ''}">🛒</button>
                   ${(item.url || item.sourceUrl) ? `<a class="btn-icon" href="${escapeHtml(item.url || item.sourceUrl)}" target="_blank" rel="noopener" title="Link öffnen">↗</a>` : ''}
                   <button class="btn-icon" data-edit-item="${item.id}" type="button" title="Bearbeiten">✎</button>
@@ -554,6 +555,16 @@
 
         container.querySelectorAll('[data-delete-item]').forEach((btn) => {
           btn.addEventListener('click', () => deleteItemById(btn.getAttribute('data-delete-item'), folderId));
+        });
+
+        container.querySelectorAll('[data-toggle-canvas]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const found = findItemWithFolder(btn.getAttribute('data-toggle-canvas'));
+            if (!found) return;
+            found.item.canvasHidden = !found.item.canvasHidden;
+            scheduleBoardSave(found.fId);
+            renderMainView();
+          });
         });
 
         container.querySelectorAll('[data-toggle-shop]').forEach((btn) => {
