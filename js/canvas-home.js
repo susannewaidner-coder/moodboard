@@ -210,6 +210,7 @@
                       ${selFit === 'contain' ? '🖼️ Ganz' : '✂️ Füllen'}
                     </button>
                     <button id="selRemoveBgBtn" class="btn btn-sm ${fc.removeWhiteBg ? 'btn-oak' : ''}" type="button" title="Weißen Hintergrund transparent freistellen">🪄 Freistellen</button>
+                    ${fc.removeWhiteBg ? `<input id="selBgTolerance" type="range" min="1" max="60" value="${fc.bgTolerance ?? 8}" style="width:56px;" title="Weiß-Toleranz: ${fc.bgTolerance ?? 8}" />` : ''}
                   </span>
                   <span class="sel-group" title="Rahmen &amp; Schatten">
                     <button class="btn btn-sm ${fCol ? 'btn-oak' : ''}" id="selFrameToggleBtn" type="button">⬜ Rand</button>
@@ -374,9 +375,9 @@
 
         const cutoutCache = state.cutoutCache || (state.cutoutCache = new Map());
 
-        function createCutoutDataUrl(imgEl, tolerance = 26) {
+        function createCutoutDataUrl(imgEl, tolerance = 8) {
           const origSrc = imgEl.dataset.origSrc || imgEl.src;
-          if (!origSrc || origSrc.startsWith('data:image/png;base64,')) return origSrc;
+          if (!origSrc || (origSrc.startsWith('data:image/png;base64,') && !imgEl.dataset.origSrc)) return origSrc;
           const key = `${origSrc}::${tolerance}`;
           if (cutoutCache.has(key)) return cutoutCache.get(key);
           try {
@@ -396,7 +397,8 @@
             let head = 0, tail = 0;
 
             const thr = 255 - tolerance;
-            const softThr = thr - 14;
+            const softStep = Math.min(10, Math.max(3, Math.round(tolerance * 0.4)));
+            const softThr = thr - softStep;
             const isNearWhite = (idx) => {
               const p = idx * 4;
               return data[p] >= thr && data[p + 1] >= thr && data[p + 2] >= thr;
@@ -472,7 +474,7 @@
           if (raw && raw.canvas && raw.canvas.removeWhiteBg && !imgEl.dataset.cutoutApplied) {
             imgEl.dataset.origSrc = imgEl.src;
             imgEl.dataset.cutoutApplied = '1';
-            imgEl.src = createCutoutDataUrl(imgEl, raw.canvas.bgTolerance || 26);
+            imgEl.src = createCutoutDataUrl(imgEl, raw.canvas.bgTolerance ?? 8);
           }
           updatePaletteBar();
         }
@@ -647,6 +649,28 @@
           scheduleBoardSave(folderId);
           renderCanvasView(container, statsEl, folderId);
         });
+
+        const selBgTol = document.getElementById('selBgTolerance');
+        if (selBgTol) {
+          selBgTol.addEventListener('input', () => {
+            const tol = Math.max(1, Math.min(60, Number(selBgTol.value) || 8));
+            selBgTol.title = `Weiß-Toleranz: ${tol}`;
+            visualItems.forEach((it) => {
+              if (!state.selectedCanvasIds.has(it.id) || !it.canvas.removeWhiteBg) return;
+              it.canvas.bgTolerance = tol;
+              const imgEl = stage.querySelector(`.canvas-item[data-canvas-id="${it.id}"] img`);
+              if (imgEl && imgEl.dataset.origSrc) {
+                const tmp = new Image();
+                tmp.onload = () => {
+                  tmp.dataset.origSrc = imgEl.dataset.origSrc;
+                  imgEl.src = createCutoutDataUrl(tmp, tol);
+                };
+                tmp.src = imgEl.dataset.origSrc;
+              }
+            });
+          });
+          selBgTol.addEventListener('change', () => scheduleBoardSave(folderId));
+        }
 
         document.querySelectorAll('#canvasSelectionBar [data-sel-shape]').forEach((btn) => {
           btn.addEventListener('click', () => {
