@@ -1063,9 +1063,41 @@
       border-radius: 50%;
     }
 
+    .canvas-item.shape-circle .canvas-resize-handle {
+      right: 14%;
+      bottom: 14%;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--accent-oak);
+      border: 2px solid #FFFFFF;
+      box-shadow: var(--shadow-sm);
+    }
+
     .canvas-item.frame-white {
       border: 6px solid #FFFFFF;
       box-shadow: var(--shadow-md);
+    }
+
+    .hex-color-pair {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .hex-color-pair input[type="color"] {
+      width: 34px;
+      height: 32px;
+      padding: 1px;
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+
+    .hex-color-pair .hex-input {
+      width: 78px;
+      padding: 4px 6px;
+      font-size: 0.78rem;
+      font-family: monospace;
     }
 
     .canvas-item.selected {
