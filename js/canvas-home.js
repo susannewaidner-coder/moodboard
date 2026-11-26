@@ -1524,7 +1524,13 @@
         }
 
         const paletteY = curY;
-        const palColors = (Array.isArray(director.palette) && director.palette.length >= 3 ? director.palette : fallbackPalette).slice(0, 5);
+        const swatchHexes = Array.isArray(director.prioritySwatches) ? director.prioritySwatches : [];
+        const rawPal = [
+          ...swatchHexes,
+          ...(Array.isArray(director.palette) ? director.palette : []),
+          ...fallbackPalette
+        ].map((h) => String(h || '').toUpperCase()).filter((h) => /^#[0-9A-F]{6}$/.test(h));
+        const palColors = Array.from(new Set(rawPal)).slice(0, Math.max(5, Math.min(6, swatchHexes.length || 5)));
         const elements = [
           {
             id: uid('cel'),
@@ -1664,7 +1670,7 @@ Antworte ausschließlich als JSON.`;
           showSyncStatus('', false);
         }
 
-        const plan = buildEditorialGridPlan(visualItems, director || {}, projectTitle, fallbackPalette, keepFormatting);
+        const plan = buildEditorialGridPlan(visualItems, { ...(director || {}), prioritySwatches: swatchHexes }, projectTitle, fallbackPalette, keepFormatting);
 
         pushCanvasUndo(folderId);
 
