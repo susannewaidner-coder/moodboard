@@ -1332,15 +1332,15 @@
     }
 
     .item-card.shop-idea {
-      border: 2px solid #C59B6D;
+      border: 3px solid #C59B6D;
     }
 
     .item-card.shop-ordered {
-      border: 2px solid #5B92B5;
+      border: 3px solid #4A7E9E;
     }
 
     .item-card.shop-bought {
-      border: 2px solid #4A8B6E;
+      border: 3px solid #4A8B6E;
     }
 
     .canvas-split-layout {
