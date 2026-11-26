@@ -4,7 +4,7 @@
       /* ========================================================================
          1. KONFIGURATION & STATE
          ======================================================================== */
-      const APP_VERSION = 'v1.0.26';
+      const APP_VERSION = 'v1.0.27';
       const LS_KEYS = {
         clientId: 'mb_oauth_client_id',
         rootName: 'mb_root_folder_name',
@@ -63,6 +63,8 @@
         tagsFileId: null,
         globalLocations: ['Kiste 1, Arbeitszimmer', 'Regal links, Keller', 'Wohnzimmer-Schrank', 'Dachboden'],
         locationsFileId: null,
+        folderIcons: {},
+        folderIconsFileId: null,
         inventoryRootId: null,
         activeTagFilters: new Set(),
         activeLocationFilters: new Set(),
@@ -529,9 +531,38 @@
           } else {
             await saveGlobalLocations();
           }
+
+          const iconFile = files.find((f) => f.name === 'folder_icons.json');
+          if (iconFile) {
+            state.folderIconsFileId = iconFile.id;
+            const data = await DriveAdapter.downloadJson(iconFile.id);
+            if (data && typeof data.icons === 'object' && data.icons) state.folderIcons = data.icons;
+          }
         } catch (e) {
           console.warn('Root-Metadaten konnten nicht geladen werden:', e);
         }
+      }
+
+      async function saveFolderIcons() {
+        if (state.mode === 'demo') {
+          const demo = DemoAdapter.load();
+          demo.folderIcons = state.folderIcons;
+          DemoAdapter.save(demo);
+          return;
+        }
+        if (state.mode !== 'drive' || !state.rootFolderId || !state.accessToken) return;
+        try {
+          const blob = new Blob([JSON.stringify({ icons: state.folderIcons }, null, 2)], { type: 'application/json' });
+          const saved = await DriveAdapter.uploadMultipart(state.rootFolderId, 'folder_icons.json', 'application/json', blob, state.folderIconsFileId);
+          state.folderIconsFileId = saved.id;
+        } catch (e) {
+          console.warn('folder_icons.json konnte nicht gespeichert werden:', e);
+        }
+      }
+
+      function getFolderIcon(folderId) {
+        if (state.folderIcons && state.folderIcons[folderId]) return state.folderIcons[folderId];
+        return isInventoryFolder(folderId) ? '📦' : '📁';
       }
 
       async function saveGlobalLocations() {
@@ -781,6 +812,7 @@
         const demo = DemoAdapter.load();
         if (Array.isArray(demo.globalTags)) state.globalTags = demo.globalTags;
         if (Array.isArray(demo.globalLocations)) state.globalLocations = demo.globalLocations;
+        state.folderIcons = (demo.folderIcons && typeof demo.folderIcons === 'object') ? demo.folderIcons : {};
         state.rootFolderId = demo.rootFolderId;
         state.folders = demo.folders;
         let invFolder = state.folders.find((f) => f.name === '_Inventory' && (f.parents || []).includes(state.rootFolderId));
