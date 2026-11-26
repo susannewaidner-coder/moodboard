@@ -5,20 +5,23 @@
          ======================================================================== */
       function renderSidebar() {
         const treeEl = document.getElementById('folderTree');
+        const invTreeEl = document.getElementById('inventoryTree');
         document.querySelectorAll('.nav-item[data-quick]').forEach((btn) => {
           btn.classList.toggle('active', state.quickView === btn.getAttribute('data-quick'));
         });
 
         const tabsEl = document.getElementById('viewTabs');
-        if (tabsEl) tabsEl.style.display = (state.mode === 'unauthenticated' || state.quickView) ? 'none' : 'flex';
+        const isInvActive = state.activeFolderId && isInventoryFolder(state.activeFolderId);
+        if (tabsEl) tabsEl.style.display = (state.mode === 'unauthenticated' || state.quickView || isInvActive) ? 'none' : 'flex';
 
         if (state.mode === 'unauthenticated') {
           treeEl.innerHTML = '<div style="padding:8px 10px; font-size:0.82rem; color:var(--text-muted);">Verbinde Google Drive oder starte den Demo-Modus.</div>';
+          if (invTreeEl) invTreeEl.innerHTML = '';
           return;
         }
 
-        function buildLevel(parentId) {
-          const children = state.folders.filter((f) => (f.parents || []).includes(parentId));
+        function buildLevel(parentId, excludeId = null, icon = '📁') {
+          const children = state.folders.filter((f) => (f.parents || []).includes(parentId) && f.id !== excludeId);
           if (children.length === 0) return '';
           return children.map((folder) => {
             const hasSub = state.folders.some((c) => (c.parents || []).includes(folder.id));
@@ -28,21 +31,27 @@
               <div class="tree-node" data-folder-id="${folder.id}">
                 <div class="tree-row ${isActive ? 'active' : ''}">
                   <button class="tree-toggle ${hasSub ? '' : 'empty'}" data-toggle-folder="${folder.id}" type="button" title="${hasSub ? (isExpanded ? 'Zuklappen' : 'Ausklappen') : ''}">${hasSub ? (isExpanded ? '▼' : '▶') : ''}</button>
-                  <span class="tree-label" data-select-folder="${folder.id}">📁 ${escapeHtml(folder.name)}</span>
+                  <span class="tree-label" data-select-folder="${folder.id}">${icon} ${escapeHtml(folder.name)}</span>
                   <span class="tree-actions">
                     <button class="btn-icon" data-folder-menu="${folder.id}" type="button" title="Ordner-Aktionen">⋯</button>
                   </span>
                 </div>
-                ${hasSub && isExpanded ? `<div class="tree-children">${buildLevel(folder.id)}</div>` : ''}
+                ${hasSub && isExpanded ? `<div class="tree-children">${buildLevel(folder.id, null, icon)}</div>` : ''}
               </div>
             `;
           }).join('');
         }
 
-        const html = buildLevel(state.rootFolderId);
+        const html = buildLevel(state.rootFolderId, state.inventoryRootId, '📁');
         treeEl.innerHTML = html || '<div style="padding:8px 10px; font-size:0.82rem; color:var(--text-muted);">Noch keine Projekte. Klicke oben auf ＋.</div>';
 
-        treeEl.querySelectorAll('[data-toggle-folder]').forEach((btn) => {
+        if (invTreeEl) {
+          const invHtml = state.inventoryRootId ? buildLevel(state.inventoryRootId, null, '📦') : '';
+          invTreeEl.innerHTML = invHtml || '<div style="padding:6px 10px; font-size:0.8rem; color:var(--text-muted);">Noch keine Inventory-Ordner. Klicke auf ＋.</div>';
+        }
+
+        const treesScope = document.querySelector('.sidebar-scroll') || treeEl;
+        treesScope.querySelectorAll('[data-toggle-folder]').forEach((btn) => {
           btn.addEventListener('click', (e) => {
             e.stopPropagation();
             const id = btn.getAttribute('data-toggle-folder');
@@ -52,7 +61,7 @@
           });
         });
 
-        treeEl.querySelectorAll('[data-select-folder]').forEach((el) => {
+        treesScope.querySelectorAll('[data-select-folder]').forEach((el) => {
           el.addEventListener('click', () => {
             openFolder(el.getAttribute('data-select-folder'));
             closeMobileSidebar();
@@ -64,7 +73,7 @@
           if (old) old.remove();
         }
 
-        treeEl.querySelectorAll('[data-folder-menu]').forEach((btn) => {
+        treesScope.querySelectorAll('[data-folder-menu]').forEach((btn) => {
           btn.addEventListener('click', (e) => {
             e.stopPropagation();
             const fId = btn.getAttribute('data-folder-menu');
@@ -242,10 +251,15 @@
         }
 
         const folder = state.folders.find((f) => f.id === state.activeFolderId);
-        const isProjectFolder = !!(folder && (folder.parents || []).includes(state.rootFolderId));
+        const isInvFolder = isInventoryFolder(state.activeFolderId);
+        const isProjectFolder = !isInvFolder && !!(folder && (folder.parents || []).includes(state.rootFolderId));
+
+        if (tabsEl) tabsEl.style.display = (state.mode === 'unauthenticated' || state.quickView || isInvFolder) ? 'none' : 'flex';
 
         if (state.activeView === 'planning') state.activeView = 'budget';
-        if (!isProjectFolder && (state.activeView === 'home' || state.activeView === 'todos' || state.activeView === 'budget')) {
+        if (isInvFolder) {
+          state.activeView = 'gallery';
+        } else if (!isProjectFolder && (state.activeView === 'home' || state.activeView === 'todos' || state.activeView === 'budget')) {
           state.activeView = 'gallery';
         }
 
@@ -278,6 +292,9 @@
             if (!itemTagsLower.has(reqTag.toLowerCase())) return false;
           }
         }
+        if (state.activeLocationFilters.size > 0) {
+          if (!item.location || !state.activeLocationFilters.has(item.location)) return false;
+        }
         const q = state.searchQuery.trim().toLowerCase();
         if (!q) return true;
         const aiColors = (item.ai && item.ai.colorNames) ? item.ai.colorNames : [];
@@ -288,6 +305,7 @@
           item.note,
           item.url,
           item.sourceUrl,
+          item.location || '',
           aiDesc,
           ...(item.tags || []),
           ...aiColors,
@@ -300,7 +318,8 @@
         const allItems = [];
         for (const [fId, data] of Object.entries(state.folderContents)) {
           const folder = state.folders.find((f) => f.id === fId);
-          for (const item of (data.board.items || [])) {
+          for (const rawItem of (data.board.items || [])) {
+            const item = resolveBoardItem(rawItem, fId);
             if (matchesSearch(item)) {
               allItems.push({ item, folderId: fId, folderName: folder ? folder.name : '' });
             }
@@ -331,7 +350,9 @@
 
       function renderGalleryView(container, statsEl, folderId) {
         const content = state.folderContents[folderId];
-        const items = sortGalleryItems((content.board.items || []).filter(matchesSearch));
+        const isInvFolder = isInventoryFolder(folderId);
+        const resolvedItems = (content.board.items || []).map((it) => resolveBoardItem(it, folderId));
+        const items = sortGalleryItems(resolvedItems.filter(matchesSearch));
         const docs = (content.driveFiles || []).filter((df) => !df.mimeType.startsWith('image/') && (!state.searchQuery.trim() || df.name.toLowerCase().includes(state.searchQuery.trim().toLowerCase())));
 
         statsEl.textContent = `${items.length} Elemente · ${docs.length} Drive-Dokumente`;
@@ -346,7 +367,7 @@
 
               <div class="tag-filter-wrap">
                 <button id="toggleTagFilterBtn" class="btn btn-sm ${state.activeTagFilters.size > 0 ? 'btn-oak' : ''}" type="button">
-                  🏷️ Filter${state.activeTagFilters.size > 0 ? ` (${state.activeTagFilters.size})` : ''} ▾
+                  🏷️ Tags${state.activeTagFilters.size > 0 ? ` (${state.activeTagFilters.size})` : ''} ▾
                 </button>
                 <div id="tagFilterPopover" class="tag-filter-popover ${state.tagDropdownOpen ? '' : 'hidden'}">
                   <div style="display:flex; justify-content:space-between; align-items:center; padding:2px 4px 6px; border-bottom:1px solid var(--border-color); margin-bottom:4px;">
@@ -362,6 +383,24 @@
                 </div>
               </div>
 
+              <div class="tag-filter-wrap">
+                <button id="toggleLocationFilterBtn" class="btn btn-sm ${state.activeLocationFilters.size > 0 ? 'btn-oak' : ''}" type="button">
+                  📍 Lagerort${state.activeLocationFilters.size > 0 ? ` (${state.activeLocationFilters.size})` : ''} ▾
+                </button>
+                <div id="locationFilterPopover" class="tag-filter-popover ${state.locationDropdownOpen ? '' : 'hidden'}">
+                  <div style="display:flex; justify-content:space-between; align-items:center; padding:2px 4px 6px; border-bottom:1px solid var(--border-color); margin-bottom:4px;">
+                    <strong style="font-size:0.78rem;">Lagerort filtern</strong>
+                    ${state.activeLocationFilters.size > 0 ? '<button id="clearLocationFiltersBtn" class="btn btn-sm" style="padding:2px 8px; font-size:0.72rem;" type="button">Zurücksetzen</button>' : ''}
+                  </div>
+                  ${state.globalLocations.map((loc) => `
+                    <label class="tag-filter-option">
+                      <input type="checkbox" data-loc-filter="${escapeHtml(loc)}" ${state.activeLocationFilters.has(loc) ? 'checked' : ''} />
+                      <span>📍 ${escapeHtml(loc)}</span>
+                    </label>
+                  `).join('')}
+                </div>
+              </div>
+
               <select id="gallerySortSelect" class="form-control" style="width:auto; padding:5px 10px; font-size:0.8rem; border-radius:var(--radius-pill);" aria-label="Sortierung">
                 <option value="newest" ${state.gallerySort === 'newest' ? 'selected' : ''}>Sortierung: Standard</option>
                 <option value="title_asc" ${state.gallerySort === 'title_asc' ? 'selected' : ''}>Titel (A–Z)</option>
@@ -370,14 +409,19 @@
                 <option value="price_desc" ${state.gallerySort === 'price_desc' ? 'selected' : ''}>Preis (absteigend)</option>
               </select>
 
+              ${!isInvFolder ? '<button id="openInventoryPickerBtn" class="btn btn-oak btn-sm" type="button" title="Elemente aus dem Inventory hier einbinden">📦 Aus Inventory</button>' : ''}
               <button id="manageTagsBtn" class="btn btn-sm" type="button" title="Tag-Liste verwalten">⚙️ Tags</button>
+              <button id="manageLocationsBtn" class="btn btn-sm" type="button" title="Lagerorte verwalten">📍 Lagerorte</button>
               <button id="openRaindropImportBtn" class="btn btn-sm" type="button" title="Raindrop CSV in diesen Ordner importieren">📥 Import</button>
             </div>
 
-            ${state.activeTagFilters.size > 0 ? `
+            ${(state.activeTagFilters.size > 0 || state.activeLocationFilters.size > 0) ? `
               <div style="display:flex; flex-wrap:wrap; gap:4px; align-items:center;">
                 ${Array.from(state.activeTagFilters).map((t) => `
                   <button class="pill-btn active" data-remove-tag-chip="${escapeHtml(t)}" type="button" style="border:1px solid var(--accent-oak); font-size:0.74rem;">#${escapeHtml(t)} ✕</button>
+                `).join('')}
+                ${Array.from(state.activeLocationFilters).map((l) => `
+                  <button class="pill-btn active" data-remove-loc-chip="${escapeHtml(l)}" type="button" style="border:1px solid var(--accent-oak); font-size:0.74rem;">📍 ${escapeHtml(l)} ✕</button>
                 `).join('')}
               </div>
             ` : ''}
@@ -394,6 +438,9 @@
         `;
 
         document.getElementById('manageTagsBtn').addEventListener('click', openTagsManagerModal);
+        document.getElementById('manageLocationsBtn').addEventListener('click', openLocationsManagerModal);
+        const invPickBtn = document.getElementById('openInventoryPickerBtn');
+        if (invPickBtn) invPickBtn.addEventListener('click', () => openInventoryPickerModal(folderId));
         document.getElementById('openRaindropImportBtn').addEventListener('click', () => {
           document.getElementById('raindropCsvInput').value = '';
           document.getElementById('raindropCsvSummary').textContent = 'Noch keine Datei ausgewählt.';
@@ -436,6 +483,37 @@
         container.querySelectorAll('[data-remove-tag-chip]').forEach((btn) => {
           btn.addEventListener('click', () => {
             state.activeTagFilters.delete(btn.getAttribute('data-remove-tag-chip'));
+            renderGalleryView(container, statsEl, folderId);
+          });
+        });
+
+        const toggleLocBtn = document.getElementById('toggleLocationFilterBtn');
+        const locPopover = document.getElementById('locationFilterPopover');
+        toggleLocBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          state.locationDropdownOpen = !state.locationDropdownOpen;
+          locPopover.classList.toggle('hidden', !state.locationDropdownOpen);
+        });
+        locPopover.addEventListener('click', (e) => e.stopPropagation());
+
+        const clearLocBtn = document.getElementById('clearLocationFiltersBtn');
+        if (clearLocBtn) {
+          clearLocBtn.addEventListener('click', () => {
+            state.activeLocationFilters.clear();
+            renderGalleryView(container, statsEl, folderId);
+          });
+        }
+        container.querySelectorAll('input[data-loc-filter]').forEach((cb) => {
+          cb.addEventListener('change', () => {
+            const l = cb.getAttribute('data-loc-filter');
+            if (cb.checked) state.activeLocationFilters.add(l);
+            else state.activeLocationFilters.delete(l);
+            renderGalleryView(container, statsEl, folderId);
+          });
+        });
+        container.querySelectorAll('[data-remove-loc-chip]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            state.activeLocationFilters.delete(btn.getAttribute('data-remove-loc-chip'));
             renderGalleryView(container, statsEl, folderId);
           });
         });
@@ -486,6 +564,7 @@
                     : `<div class="doc-icon-box"><span>🔗</span><span class="doc-icon-label">Web-Link</span></div>`)
               }
               <span class="item-type-badge">${badge}</span>
+              ${item.isRef ? '<span class="item-ref-badge" title="Verknüpftes Element aus dem Inventory">🔗 Inventory</span>' : ''}
               <span class="price-badge status-${shopStatus}">${badgeText}</span>
             </div>
             <div class="item-body">
@@ -493,6 +572,7 @@
                 <h3 class="item-title">${escapeHtml(item.title || 'Ohne Titel')}</h3>
                 ${item.note ? `<p class="item-note">${escapeHtml(item.note)}</p>` : ''}
                 ${folderLabel ? `<div style="font-size:0.72rem; color:var(--accent-oak); margin-top:3px;">📁 ${escapeHtml(folderLabel)}</div>` : ''}
+                ${item.location ? `<div><span class="item-loc-pill">📍 ${escapeHtml(item.location)}</span></div>` : ''}
                 ${tagsHtml ? `<div class="item-tags">${tagsHtml}</div>` : ''}
               </div>
               <div class="item-meta">
@@ -551,8 +631,9 @@
         container.querySelectorAll('[data-open-item]').forEach((el) => {
           el.addEventListener('click', () => {
             const id = el.getAttribute('data-open-item');
-            const item = findItemById(id);
-            if (!item) return;
+            const found = findItemWithFolder(id);
+            if (!found) return;
+            const item = resolveBoardItem(found.item, found.fId);
             if (item.type === 'bookmark' && item.url) {
               window.open(item.url, '_blank', 'noopener');
               return;
@@ -591,12 +672,15 @@
             menu.className = 'tree-menu-popover';
             menu.style.top = `${Math.min(window.innerHeight - 130, rect.bottom + 4)}px`;
             menu.style.left = `${Math.max(10, Math.min(window.innerWidth - 195, rect.right - 180))}px`;
+            const canMoveToInv = !isInventoryFolder(fId) && item.type !== 'ref';
+            const delLabel = item.type === 'ref' ? '🔗 Aus Projekt entfernen' : '🗑 Löschen';
             menu.innerHTML = `
               <button class="tree-menu-item" data-im-action="canvas" type="button">
                 ${item.canvasHidden ? '🎨 Auf Moodboard zeigen' : '🎨 Vom Moodboard ausblenden'}
               </button>
+              ${canMoveToInv ? '<button class="tree-menu-item" data-im-action="move-inv" type="button">📦 Ins Inventory verschieben</button>' : ''}
               <button class="tree-menu-item" data-im-action="delete" type="button" style="color:var(--danger);">
-                🗑 Löschen
+                ${delLabel}
               </button>
             `;
             menu.addEventListener('click', (ev) => ev.stopPropagation());
@@ -606,6 +690,13 @@
               scheduleBoardSave(fId);
               renderMainView();
             });
+            const moveInvBtn = menu.querySelector('[data-im-action="move-inv"]');
+            if (moveInvBtn) {
+              moveInvBtn.addEventListener('click', () => {
+                menu.remove();
+                openMoveToInventoryModal(item, fId);
+              });
+            }
             menu.querySelector('[data-im-action="delete"]').addEventListener('click', () => {
               menu.remove();
               deleteItemById(id, folderId || fId);
@@ -643,14 +734,24 @@
       }
 
       async function deleteItemById(itemId, folderId) {
-        if (!(await uiConfirm('Dieses Element wirklich entfernen?', 'Element löschen', 'Löschen'))) return;
         const targetFolderId = folderId || state.activeFolderId;
         const content = state.folderContents[targetFolderId];
         if (!content) return;
         const item = content.board.items.find((i) => i.id === itemId);
+        if (!item) return;
+
+        const isRef = item.type === 'ref';
+        const isInv = isInventoryFolder(targetFolderId);
+        const msg = isRef
+          ? 'Verknüpfung aus diesem Projekt entfernen? (Das Original im Inventory bleibt erhalten.)'
+          : (isInv
+            ? 'Dieses Original-Element wirklich aus dem Inventory löschen? Verknüpfungen in Projekten verlieren dann ihr Bild.'
+            : 'Dieses Element wirklich entfernen?');
+        if (!(await uiConfirm(msg, isRef ? 'Verknüpfung entfernen' : 'Element löschen', isRef ? 'Entfernen' : 'Löschen'))) return;
+
         content.board.items = content.board.items.filter((i) => i.id !== itemId);
         scheduleBoardSave(targetFolderId);
-        if (item && item.driveFileId && state.mode === 'drive') {
+        if (!isRef && item.driveFileId && state.mode === 'drive') {
           try { await DriveAdapter.trashFile(item.driveFileId); } catch (e) { console.warn(e); }
         }
         renderMainView();
@@ -789,23 +890,38 @@
 
       function openItemModal(item = null) {
         if (!state.activeFolderId && !item) {
-          uiAlert('Bitte wähle zuerst einen Projektordner aus.');
+          uiAlert('Bitte wähle zuerst einen Ordner aus.');
           return;
         }
         state.editingItem = item;
-        const isBookmark = !item || item.type === 'bookmark';
+        const resolved = item ? resolveBoardItem(item) : null;
+        const dataItem = resolved || item;
+        const isRef = !!(item && item.type === 'ref');
+        const banner = document.getElementById('itemRefInfoBanner');
+        if (banner) banner.classList.toggle('hidden', !isRef);
+
+        const isBookmark = !dataItem || dataItem.type === 'bookmark';
         document.getElementById('itemModalTitle').textContent = item ? 'Element bearbeiten' : 'Neues Web-Bookmark';
-        document.getElementById('itemTitleInput').value = item ? (item.title || '') : '';
-        document.getElementById('itemUrlInput').value = item ? (item.url || item.sourceUrl || '') : '';
-        document.getElementById('itemPreviewInput').value = item ? (item.previewImageUrl || '') : '';
-        document.getElementById('itemNoteInput').value = item ? (item.note || '') : '';
-        state.editingItemTags = new Set(item && Array.isArray(item.tags) ? item.tags : []);
+        document.getElementById('itemTitleInput').value = dataItem ? (dataItem.title || '') : '';
+        document.getElementById('itemUrlInput').value = dataItem ? (dataItem.url || dataItem.sourceUrl || '') : '';
+        document.getElementById('itemPreviewInput').value = dataItem ? (dataItem.previewImageUrl || '') : '';
+        document.getElementById('itemNoteInput').value = dataItem ? (dataItem.note || '') : '';
+
+        const locSelect = document.getElementById('itemLocationSelect');
+        if (locSelect) {
+          const curLoc = dataItem ? (dataItem.location || '') : '';
+          const locOptions = Array.from(new Set([...state.globalLocations, ...(curLoc ? [curLoc] : [])]));
+          locSelect.innerHTML = `<option value="">— Kein Lagerort —</option>` +
+            locOptions.map((l) => `<option value="${escapeHtml(l)}" ${l === curLoc ? 'selected' : ''}>📍 ${escapeHtml(l)}</option>`).join('');
+        }
+
+        state.editingItemTags = new Set(dataItem && Array.isArray(dataItem.tags) ? dataItem.tags : []);
         renderItemTagPicker();
         document.getElementById('itemPreviewGroup').style.display = isBookmark ? 'block' : 'none';
         document.getElementById('fetchBookmarkMetaBtn').style.display = isBookmark ? 'inline-flex' : 'none';
         document.getElementById('bookmarkMetaHint').textContent = isBookmark ? 'Beim Einfügen einer URL werden Titel & Vorschaubild automatisch geladen.' : '';
         updateBookmarkPreviewThumb();
-        const shop = item && item.shopping ? item.shopping : { enabled: false, price: '', quantity: 1, status: 'idea' };
+        const shop = dataItem && dataItem.shopping ? dataItem.shopping : { enabled: false, price: '', quantity: 1, status: 'idea' };
         document.getElementById('itemShopEnabled').checked = !!shop.enabled;
         document.getElementById('itemShopPrice').value = shop.price || '';
         document.getElementById('itemShopQty').value = shop.quantity || 1;
@@ -905,6 +1021,14 @@
           return;
         }
         promptCreateFolder(state.rootFolderId);
+      });
+
+      document.getElementById('newInventoryFolderBtn').addEventListener('click', () => {
+        if (state.mode === 'unauthenticated' || !state.inventoryRootId) {
+          uiAlert('Bitte verbinde dich zuerst mit Google Drive oder starte den Demo-Modus.');
+          return;
+        }
+        promptCreateFolder(state.inventoryRootId);
       });
 
       document.getElementById('addImageBtn').addEventListener('click', () => {
@@ -1277,6 +1401,7 @@
         const url = document.getElementById('itemUrlInput').value.trim();
         const previewImageUrl = document.getElementById('itemPreviewInput').value.trim();
         const note = document.getElementById('itemNoteInput').value.trim();
+        const location = document.getElementById('itemLocationSelect') ? document.getElementById('itemLocationSelect').value : '';
         const tags = Array.from(state.editingItemTags);
         const shopping = {
           enabled: document.getElementById('itemShopEnabled').checked,
@@ -1286,17 +1411,39 @@
         };
 
         if (state.editingItem) {
-          state.editingItem.title = title || 'Ohne Titel';
-          if (state.editingItem.type === 'image') state.editingItem.sourceUrl = url;
-          else {
-            state.editingItem.url = url;
-            state.editingItem.previewImageUrl = previewImageUrl;
+          if (state.editingItem.type === 'ref') {
+            const resolved = resolveBoardItem(state.editingItem);
+            if (resolved && resolved.targetItem) {
+              const orig = resolved.targetItem;
+              orig.title = title || 'Ohne Titel';
+              if (orig.type === 'image') orig.sourceUrl = url;
+              else {
+                orig.url = url;
+                orig.previewImageUrl = previewImageUrl;
+              }
+              orig.note = note;
+              orig.location = location;
+              orig.tags = tags;
+              orig.shopping = { ...(orig.shopping || { enabled: false, quantity: 1, status: 'idea' }), price: shopping.price };
+              scheduleBoardSave(resolved.targetFolderId);
+            }
+            state.editingItem.shopping = shopping;
+            const found = findItemWithFolder(state.editingItem.id);
+            scheduleBoardSave(found ? found.fId : state.activeFolderId);
+          } else {
+            state.editingItem.title = title || 'Ohne Titel';
+            if (state.editingItem.type === 'image') state.editingItem.sourceUrl = url;
+            else {
+              state.editingItem.url = url;
+              state.editingItem.previewImageUrl = previewImageUrl;
+            }
+            state.editingItem.note = note;
+            state.editingItem.location = location;
+            state.editingItem.tags = tags;
+            state.editingItem.shopping = shopping;
+            const found = findItemWithFolder(state.editingItem.id);
+            scheduleBoardSave(found ? found.fId : state.activeFolderId);
           }
-          state.editingItem.note = note;
-          state.editingItem.tags = tags;
-          state.editingItem.shopping = shopping;
-          const found = findItemWithFolder(state.editingItem.id);
-          scheduleBoardSave(found ? found.fId : state.activeFolderId);
         } else {
           if (!url) { uiAlert('Bitte gib eine URL ein.'); return; }
           const content = state.folderContents[state.activeFolderId];
@@ -1307,6 +1454,7 @@
             previewImageUrl,
             title: title || url,
             note,
+            location,
             tags,
             shopping
           });
@@ -1314,6 +1462,201 @@
         }
         closeModal('itemModal');
         renderMainView();
+      });
+
+      /* ========================================================================
+         12c. INVENTORY PICKER & VERSCHIEBEN INS INVENTORY
+         ======================================================================== */
+      let pendingMoveToInv = null;
+
+      function renderInventoryPickerGrid() {
+        const grid = document.getElementById('invPickerGrid');
+        const folderFilter = document.getElementById('invPickerFolderSelect').value;
+        const q = document.getElementById('invPickerSearchInput').value.trim().toLowerCase();
+        const invFolders = folderFilter === '__all__'
+          ? getInventoryFolders()
+          : getInventoryFolders().filter((f) => f.id === folderFilter);
+
+        const entries = [];
+        for (const f of invFolders) {
+          const fc = state.folderContents[f.id];
+          if (!fc) continue;
+          for (const it of (fc.board.items || [])) {
+            if (it.type === 'ref') continue;
+            const hay = [it.title, it.note, it.location || '', ...(it.tags || [])].join(' ').toLowerCase();
+            if (q && !hay.includes(q)) continue;
+            entries.push({ item: it, folderId: f.id, folderName: f.name });
+          }
+        }
+
+        if (entries.length === 0) {
+          grid.innerHTML = '<div style="grid-column:1/-1; padding:24px; text-align:center; color:var(--text-muted); font-size:0.86rem;">Keine passenden Inventory-Elemente gefunden.</div>';
+        } else {
+          grid.innerHTML = entries.map(({ item, folderId, folderName }) => {
+            const key = `${folderId}::${item.id}`;
+            const isSel = state.inventoryPickerSelected.has(key);
+            const src = item.localDataUrl || item.previewImageUrl || '';
+            return `
+              <div class="inv-picker-card ${isSel ? 'selected' : ''}" data-inv-pick="${escapeHtml(key)}">
+                <div class="inv-picker-thumb">
+                  ${src
+                    ? `<img src="${escapeHtml(src)}" alt="${escapeHtml(item.title)}" data-drive-img="${item.driveFileId || ''}" />`
+                    : (item.driveFileId
+                        ? `<img alt="${escapeHtml(item.title)}" data-drive-img="${item.driveFileId}" />`
+                        : `<span style="font-size:1.8rem;">🔗</span>`)}
+                </div>
+                <div style="padding:8px; font-size:0.78rem;">
+                  <div style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(item.title || 'Ohne Titel')}</div>
+                  <div style="color:var(--text-muted); font-size:0.7rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📦 ${escapeHtml(folderName)}${item.location ? ' · 📍 ' + escapeHtml(item.location) : ''}</div>
+                </div>
+              </div>
+            `;
+          }).join('');
+
+          grid.querySelectorAll('img[data-drive-img]').forEach(async (imgEl) => {
+            const fileId = imgEl.getAttribute('data-drive-img');
+            if (!fileId || state.mode !== 'drive') return;
+            try { imgEl.src = await DriveAdapter.fetchBlobUrl(fileId); } catch (e) {}
+          });
+
+          grid.querySelectorAll('[data-inv-pick]').forEach((card) => {
+            card.addEventListener('click', () => {
+              const key = card.getAttribute('data-inv-pick');
+              if (state.inventoryPickerSelected.has(key)) state.inventoryPickerSelected.delete(key);
+              else state.inventoryPickerSelected.add(key);
+              card.classList.toggle('selected', state.inventoryPickerSelected.has(key));
+              updateInvPickerFooter();
+            });
+          });
+        }
+        updateInvPickerFooter();
+      }
+
+      function updateInvPickerFooter() {
+        const count = state.inventoryPickerSelected.size;
+        document.getElementById('invPickerCount').textContent = `${count} ausgewählt`;
+        document.getElementById('invPickerConfirmBtn').disabled = count === 0;
+      }
+
+      async function openInventoryPickerModal(targetFolderId) {
+        if (!state.inventoryRootId) {
+          await uiAlert('Inventory-Ordner noch nicht geladen.');
+          return;
+        }
+        state.inventoryPickerFolderId = targetFolderId;
+        state.inventoryPickerSelected = new Set();
+        const invFolders = getInventoryFolders();
+        showSyncStatus('Lade Inventory…', true);
+        await ensureFoldersLoaded(invFolders.map((f) => f.id));
+        showSyncStatus('', false);
+
+        const sel = document.getElementById('invPickerFolderSelect');
+        sel.innerHTML = `<option value="__all__">Alle Inventory-Ordner</option>` +
+          invFolders.map((f) => `<option value="${escapeHtml(f.id)}">📦 ${escapeHtml(f.name === '_Inventory' ? 'Hauptordner' : f.name)}</option>`).join('');
+        document.getElementById('invPickerSearchInput').value = '';
+        renderInventoryPickerGrid();
+        openModal('inventoryPickerModal');
+      }
+
+      document.getElementById('invPickerFolderSelect').addEventListener('change', renderInventoryPickerGrid);
+      document.getElementById('invPickerSearchInput').addEventListener('input', renderInventoryPickerGrid);
+      document.getElementById('invPickerConfirmBtn').addEventListener('click', () => {
+        const targetId = state.inventoryPickerFolderId || state.activeFolderId;
+        const fc = state.folderContents[targetId];
+        if (!fc || state.inventoryPickerSelected.size === 0) return;
+
+        let added = 0;
+        for (const key of state.inventoryPickerSelected) {
+          const [refFolderId, refItemId] = key.split('::');
+          const alreadyLinked = (fc.board.items || []).some((it) => it.type === 'ref' && it.refFolderId === refFolderId && it.refItemId === refItemId);
+          if (alreadyLinked) continue;
+          const invFc = state.folderContents[refFolderId];
+          const orig = invFc ? (invFc.board.items || []).find((i) => i.id === refItemId) : null;
+          const origPrice = orig && orig.shopping && orig.shopping.price ? Number(orig.shopping.price) : 0;
+          fc.board.items.unshift({
+            id: uid('ref'),
+            type: 'ref',
+            refFolderId,
+            refItemId,
+            shopping: { enabled: false, price: origPrice, quantity: 1, status: 'idea' }
+          });
+          added++;
+        }
+
+        if (added > 0) scheduleBoardSave(targetId);
+        closeModal('inventoryPickerModal');
+        renderMainView();
+        showSyncStatus(`✅ ${added} Element(e) aus Inventory eingebunden`, true);
+        setTimeout(() => showSyncStatus('', false), 2600);
+      });
+
+      async function openMoveToInventoryModal(item, sourceFolderId) {
+        const invFolders = getInventoryFolders();
+        if (invFolders.length === 0) {
+          await uiAlert('Kein Inventory-Ordner vorhanden.');
+          return;
+        }
+        pendingMoveToInv = { item, sourceFolderId };
+        const sel = document.getElementById('moveToInvFolderSelect');
+        sel.innerHTML = invFolders.map((f) =>
+          `<option value="${escapeHtml(f.id)}">📦 ${escapeHtml(f.name === '_Inventory' ? 'Inventory (Hauptordner)' : f.name)}</option>`
+        ).join('');
+        openModal('moveToInventoryModal');
+      }
+
+      document.getElementById('moveToInvConfirmBtn').addEventListener('click', async () => {
+        if (!pendingMoveToInv) return;
+        const { item, sourceFolderId } = pendingMoveToInv;
+        const targetInvId = document.getElementById('moveToInvFolderSelect').value;
+        if (!targetInvId) return;
+
+        closeModal('moveToInventoryModal');
+        showSyncStatus('Verschiebe Element ins Inventory…', true);
+        try {
+          await ensureFoldersLoaded([targetInvId]);
+          const sourceFc = state.folderContents[sourceFolderId];
+          const invFc = state.folderContents[targetInvId];
+          if (!sourceFc || !invFc) return;
+
+          if (state.mode === 'drive' && item.driveFileId && sourceFolderId !== targetInvId) {
+            await DriveAdapter.moveFile(item.driveFileId, sourceFolderId, targetInvId);
+            const dfIdx = (sourceFc.driveFiles || []).findIndex((df) => df.id === item.driveFileId);
+            if (dfIdx >= 0) {
+              const [movedDf] = sourceFc.driveFiles.splice(dfIdx, 1);
+              invFc.driveFiles.push(movedDf);
+            }
+          }
+
+          const invItem = {
+            ...item,
+            id: uid(item.type === 'image' ? 'img' : 'bm')
+          };
+          delete invItem.canvas;
+          delete invItem.canvasHidden;
+          invFc.board.items.unshift(invItem);
+
+          const refItem = {
+            id: item.id,
+            type: 'ref',
+            refFolderId: targetInvId,
+            refItemId: invItem.id,
+            canvas: item.canvas,
+            canvasHidden: item.canvasHidden,
+            shopping: item.shopping || { enabled: false, price: 0, quantity: 1, status: 'idea' }
+          };
+          const idx = sourceFc.board.items.findIndex((i) => i.id === item.id);
+          if (idx >= 0) sourceFc.board.items[idx] = refItem;
+
+          scheduleBoardSave(targetInvId);
+          scheduleBoardSave(sourceFolderId);
+          renderMainView();
+          showSyncStatus('✅ Ins Inventory verschoben & verknüpft', true);
+          setTimeout(() => showSyncStatus('', false), 2600);
+        } catch (err) {
+          await uiAlert('Fehler beim Verschieben: ' + err.message, 'Fehler');
+        } finally {
+          pendingMoveToInv = null;
+        }
       });
 
       document.getElementById('conflictReloadBtn').addEventListener('click', async () => {
@@ -1421,8 +1764,9 @@
           const fName = folder ? folder.name : 'Ordner';
 
           // Verknüpfte Bilder / Bookmarks
-          for (const item of (content.board.items || [])) {
-            if (item.shopping && item.shopping.enabled) {
+          for (const rawItem of (content.board.items || [])) {
+            const item = resolveBoardItem(rawItem, fId);
+            if (item && item.shopping && item.shopping.enabled) {
               shoppingEntries.push({
                 kind: 'item',
                 folderId: fId,
@@ -1435,7 +1779,7 @@
                 price: Number(item.shopping.price || 0),
                 quantity: Number(item.shopping.quantity || 1),
                 status: item.shopping.status || 'idea',
-                ref: item
+                ref: rawItem
               });
             }
           }
