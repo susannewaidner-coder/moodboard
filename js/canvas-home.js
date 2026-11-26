@@ -118,41 +118,30 @@
           <div id="canvasViewWrap" class="canvas-view-wrap ${state.canvasFullscreen ? 'fullscreen' : ''}">
           <div class="canvas-toolbar">
             <div class="canvas-toolbar-group">
-              <button id="canvasAddImageBtn" class="btn btn-oak btn-sm" type="button">＋ Bild</button>
-              <button id="canvasAddBookmarkBtn" class="btn btn-sm" type="button">＋ Bookmark</button>
-              <button id="canvasAddFromInvBtn" class="btn btn-sm" type="button" title="Elemente aus dem Inventory hier einbinden">📦 Aus Inventory</button>
-              <button id="canvasAddTextBtn" class="btn btn-sm" type="button" title="Freien Text oder Kreis-Badge hinzufügen">🔤 Text</button>
-              <button id="canvasAddPaletteBtn" class="btn btn-sm" type="button" title="Farbpaletten-Streifen hinzufügen">🎨 Palette</button>
-              <button id="canvasAutoLayoutBtn" class="btn btn-sm" type="button" title="Richtet Kacheln am Raster aus und behält deine Reihenfolge bei">🧲 Ausrichten</button>
+              <div class="canvas-options-wrap">
+                <button id="canvasAddMenuBtn" class="btn btn-oak btn-sm" type="button">＋ Hinzufügen ▾</button>
+                <div id="canvasAddMenuPopover" class="canvas-options-popover hidden" style="min-width:190px; padding:6px;">
+                  <button id="canvasAddImageBtn" class="tree-menu-item" type="button">🖼️ Bild hochladen</button>
+                  <button id="canvasAddBookmarkBtn" class="tree-menu-item" type="button">🔗 Web-Bookmark</button>
+                  <button id="canvasAddFromInvBtn" class="tree-menu-item" type="button">📦 Aus Inventory</button>
+                  <button id="canvasAddTextBtn" class="tree-menu-item" type="button">🔤 Text / Badge</button>
+                  <button id="canvasAddPaletteBtn" class="tree-menu-item" type="button">🎨 Farbpalette</button>
+                </div>
+              </div>
+
               <button id="canvasLockBtn" class="btn btn-sm ${state.canvasLocked ? 'btn-oak' : ''}" type="button" title="Verschieben sperren/entsperren">
                 ${state.canvasLocked ? '🔒 Gesperrt' : '🔓 Frei'}
               </button>
 
               <div class="pill-group" style="padding:2px;">
                 <button id="canvasZoomOutBtn" class="pill-btn" type="button" title="Verkleinern">－</button>
-                <span id="canvasZoomLabel" style="font-size:0.76rem; padding:0 6px; display:inline-flex; align-items:center;">${Math.round(state.canvasZoom * 100)} %</span>
+                <button id="canvasResetViewBtn" class="pill-btn" type="button" title="Zoom auf 100 % zurücksetzen und nach oben links scrollen" style="font-size:0.76rem; padding:0 6px;">${Math.round(state.canvasZoom * 100)} %</button>
                 <button id="canvasZoomInBtn" class="pill-btn" type="button" title="Vergrößern">＋</button>
               </div>
 
               <div class="canvas-options-wrap">
-                <button id="canvasOptionsBtn" class="btn btn-sm" type="button">⚙️ Optionen ▾</button>
+                <button id="canvasOptionsBtn" class="btn btn-sm" type="button">⚙️ Board ▾</button>
                 <div id="canvasOptionsPopover" class="canvas-options-popover hidden">
-                  <div>
-                    <div style="font-size:0.74rem; font-weight:600; color:var(--text-muted); margin-bottom:4px;">Bilddarstellung</div>
-                    <button id="canvasFitBtn" class="btn btn-sm ${fitMode === 'contain' ? 'btn-oak' : ''}" type="button" style="width:100%;">
-                      ${fitMode === 'contain' ? '🖼️ Ganzes Bild aktiv' : '✂️ Kachel ausfüllen aktiv'}
-                    </button>
-                  </div>
-                  <div>
-                    <div style="font-size:0.74rem; font-weight:600; color:var(--text-muted); margin-bottom:4px;">Format (Auswahl oder alle)</div>
-                    <select id="canvasRatioSelect" class="form-control" style="padding:5px 8px; font-size:0.8rem;">
-                      <option value="">Format wählen…</option>
-                      <option value="original">Original-Proportion</option>
-                      <option value="1:1">Quadrat (1:1)</option>
-                      <option value="4:3">Querformat (4:3)</option>
-                      <option value="3:4">Hochformat (3:4)</option>
-                    </select>
-                  </div>
                   <div>
                     <div style="font-size:0.74rem; font-weight:600; color:var(--text-muted); margin-bottom:4px;">Hintergrundfarbe</div>
                     <div style="display:flex; gap:5px; align-items:center; margin-bottom:6px; flex-wrap:wrap;">
@@ -167,11 +156,14 @@
                         <input id="canvasBgColorHex" class="form-control hex-input" type="text" maxlength="7" value="${escapeHtml((bgColor || '#F8F7F4').toUpperCase())}" placeholder="#F8F7F4" />
                       </div>
                     </div>
-                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                  </div>
+                  <div>
+                    <div style="font-size:0.74rem; font-weight:600; color:var(--text-muted); margin-bottom:4px;">Raster &amp; Ausrichtung</div>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:6px;">
                       <button id="canvasGridBtn" class="btn btn-sm ${showGrid ? '' : 'btn-oak'}" type="button" style="flex:1;">${showGrid ? 'Raster: An' : 'Raster: Aus'}</button>
                       <button id="canvasSnapBtn" class="btn btn-sm ${snapToGrid ? 'btn-oak' : ''}" type="button" style="flex:1;" title="Beim Verschieben und Skalieren am 12px-Raster einrasten">${snapToGrid ? '🧲 Snap: An' : '🧲 Snap: Aus'}</button>
-                      <button id="canvasResetViewBtn" class="btn btn-sm" type="button" style="flex:1;" title="Zoom auf 100 % zurücksetzen und nach oben links scrollen">🔍 100 %</button>
                     </div>
+                    <button id="canvasAutoLayoutBtn" class="btn btn-sm" type="button" style="width:100%;" title="Richtet alle Kacheln sauber im Raster an">📐 Alle Kacheln neu anordnen</button>
                   </div>
                 </div>
               </div>
@@ -192,40 +184,58 @@
 
           <div id="canvasSelectionBar" class="canvas-selection-bar">
             ${selectedList.length > 0 ? `
-              <strong>${selectedList.length} ausgewählt:</strong>
+              <span class="sel-group"><strong>${selectedList.length} ausgew.</strong></span>
               ${firstSel && firstSel.kind === 'item' ? (() => {
                 const fc = firstSel.box;
                 const fCol = fc.frameColor || (fc.frame === 'white' ? '#FFFFFF' : '');
                 const fWidth = Math.max(1, Number(fc.frameWidth) || 6);
                 const hasShadow = fc.shadow !== false;
+                const selFit = fc.fitMode || fitMode;
                 return `
-                  <button class="btn btn-sm" data-sel-shape="rect" type="button">▭ Rechteck</button>
-                  <button class="btn btn-sm" data-sel-shape="rounded" type="button">▢ Rund</button>
-                  <button class="btn btn-sm" data-sel-shape="circle" type="button">◯ Kreis</button>
-                  <button class="btn btn-sm ${fCol ? 'btn-oak' : ''}" id="selFrameToggleBtn" type="button">⬜ Rand</button>
-                  <div class="hex-color-pair" title="Randfarbe &amp; Breite">
-                    <input id="selFrameColorInput" type="color" value="${escapeHtml(fCol || '#FFFFFF')}" />
-                    <input id="selFrameColorHex" class="form-control hex-input" type="text" maxlength="7" value="${escapeHtml((fCol || '#FFFFFF').toUpperCase())}" placeholder="#FFFFFF" />
-                    <input id="selFrameWidthInput" class="form-control" type="number" min="1" max="24" value="${fWidth}" title="Randbreite (px)" style="width:48px; padding:4px 5px; font-size:0.78rem;" />
-                  </div>
-                  <button class="btn btn-sm ${hasShadow ? 'btn-oak' : ''}" id="selShadowToggleBtn" type="button" title="Schatten ein-/ausschalten">🌑 Schatten</button>
-                  <button class="btn btn-sm" id="selOrigRatioBtn" type="button" title="Passt Höhe exakt an das Bildformat an (kein Rand, kein Beschnitt)">📐 Original-Format</button>
-                  <span style="display:inline-flex; align-items:center; gap:4px; margin-left:4px;" title="Bildausschnitt verschieben &amp; zoomen">
-                    <span>🔍</span>
-                    <input id="selCropX" type="range" min="0" max="100" value="${fc.cropX ?? 50}" style="width:48px;" title="Ausschnitt Links/Rechts" />
-                    <input id="selCropY" type="range" min="0" max="100" value="${fc.cropY ?? 50}" style="width:48px;" title="Ausschnitt Oben/Unten" />
-                    <input id="selCropZoom" type="range" min="1" max="2.5" step="0.05" value="${fc.cropZoom || 1}" style="width:52px;" title="Ausschnitt Zoom" />
+                  <span class="sel-group" title="Form &amp; Format">
+                    <button class="btn btn-sm ${(!fc.shape || fc.shape === 'rect') ? 'btn-oak' : ''}" data-sel-shape="rect" type="button" title="Rechteck">▭</button>
+                    <button class="btn btn-sm ${fc.shape === 'rounded' ? 'btn-oak' : ''}" data-sel-shape="rounded" type="button" title="Abgerundet">▢</button>
+                    <button class="btn btn-sm ${fc.shape === 'circle' ? 'btn-oak' : ''}" data-sel-shape="circle" type="button" title="Kreis">◯</button>
+                    <select id="canvasRatioSelect" class="form-control" style="padding:3px 6px; font-size:0.78rem; width:auto;" title="Seitenverhältnis">
+                      <option value="">Format…</option>
+                      <option value="original">Original</option>
+                      <option value="1:1">1:1</option>
+                      <option value="4:3">4:3</option>
+                      <option value="3:4">3:4</option>
+                    </select>
+                    <button id="canvasFitBtn" class="btn btn-sm ${selFit === 'contain' ? 'btn-oak' : ''}" type="button" title="Bilddarstellung umschalten: Kachel ausfüllen vs. Ganzes Bild">
+                      ${selFit === 'contain' ? '🖼️ Ganz' : '✂️ Füllen'}
+                    </button>
                   </span>
-                  <button class="btn btn-sm" id="selResetBtn" type="button" title="Form, Rand, Schatten, Ausschnitt &amp; Format zurücksetzen">↺ Zurücksetzen</button>
+                  <span class="sel-group" title="Rahmen &amp; Schatten">
+                    <button class="btn btn-sm ${fCol ? 'btn-oak' : ''}" id="selFrameToggleBtn" type="button">⬜ Rand</button>
+                    <div class="hex-color-pair">
+                      <input id="selFrameColorInput" type="color" value="${escapeHtml(fCol || '#FFFFFF')}" title="Randfarbe" />
+                      <input id="selFrameColorHex" class="form-control hex-input" type="text" maxlength="7" value="${escapeHtml((fCol || '#FFFFFF').toUpperCase())}" placeholder="#FFFFFF" />
+                      <input id="selFrameWidthInput" class="form-control" type="number" min="1" max="24" value="${fWidth}" title="Randbreite (px)" style="width:46px; padding:3px 5px; font-size:0.78rem;" />
+                    </div>
+                    <button class="btn btn-sm ${hasShadow ? 'btn-oak' : ''}" id="selShadowToggleBtn" type="button" title="Schatten ein-/ausschalten">🌑</button>
+                  </span>
+                  <span class="sel-group" title="Bildausschnitt (X / Y / Zoom)">
+                    <span>🔍</span>
+                    <input id="selCropX" type="range" min="0" max="100" value="${fc.cropX ?? 50}" style="width:44px;" title="Ausschnitt Links/Rechts" />
+                    <input id="selCropY" type="range" min="0" max="100" value="${fc.cropY ?? 50}" style="width:44px;" title="Ausschnitt Oben/Unten" />
+                    <input id="selCropZoom" type="range" min="1" max="2.5" step="0.05" value="${fc.cropZoom || 1}" style="width:48px;" title="Ausschnitt Zoom" />
+                  </span>
                 `;
               })() : ''}
               ${firstSel && firstSel.kind === 'el' ? `
-                <button class="btn btn-sm" id="selEditElBtn" type="button">✏️ Bearbeiten</button>
+                <span class="sel-group">
+                  <button class="btn btn-sm" id="selEditElBtn" type="button">✏️ Bearbeiten</button>
+                </span>
               ` : ''}
-              <button class="btn btn-sm" id="canvasLayerUpBtn" type="button">⬆️ Vorne</button>
-              <button class="btn btn-sm" id="canvasLayerDownBtn" type="button">⬇️ Hinten</button>
-              <button class="btn btn-sm" id="selRemoveCanvasBtn" type="button" style="color:var(--danger);">🗑 Vom Board entfernen</button>
-            ` : `<span style="color:var(--text-muted);">Klicke auf ein Element für Form, Rand, Schatten, Ausschnitt &amp; Ebenen…</span>`}
+              <span class="sel-group">
+                <button class="btn btn-sm" id="canvasLayerUpBtn" type="button" title="Eine Ebene nach vorne">⬆️</button>
+                <button class="btn btn-sm" id="canvasLayerDownBtn" type="button" title="Eine Ebene nach hinten">⬇️</button>
+                ${firstSel && firstSel.kind === 'item' ? '<button class="btn btn-sm" id="selResetBtn" type="button" title="Form, Rand, Schatten, Ausschnitt &amp; Format zurücksetzen">↺</button>' : ''}
+                <button class="btn btn-sm" id="selRemoveCanvasBtn" type="button" style="color:var(--danger);" title="Vom Moodboard entfernen">🗑</button>
+              </span>
+            ` : `<span style="color:var(--text-muted);">Klicke auf ein Element auf dem Board, um Form, Rand, Ausschnitt oder Ebene anzupassen…</span>`}
           </div>
 
           <div class="canvas-split-layout ${state.canvasSplitOpen ? 'with-split' : ''}">
@@ -406,7 +416,7 @@
           stage.style.transform = `scale(${state.canvasZoom})`;
           stage.style.width = `${Math.round(maxRight * state.canvasZoom)}px`;
           stage.style.height = `${Math.round(maxBottom * state.canvasZoom)}px`;
-          document.getElementById('canvasZoomLabel').textContent = `${Math.round(state.canvasZoom * 100)} %`;
+          document.getElementById('canvasResetViewBtn').textContent = `${Math.round(state.canvasZoom * 100)} %`;
         });
         const invCanvasBtn = document.getElementById('canvasAddFromInvBtn');
         if (invCanvasBtn) invCanvasBtn.addEventListener('click', () => openInventoryPickerModal(folderId));
@@ -415,7 +425,7 @@
           stage.style.transform = `scale(${state.canvasZoom})`;
           stage.style.width = `${Math.round(maxRight * state.canvasZoom)}px`;
           stage.style.height = `${Math.round(maxBottom * state.canvasZoom)}px`;
-          document.getElementById('canvasZoomLabel').textContent = `${Math.round(state.canvasZoom * 100)} %`;
+          document.getElementById('canvasResetViewBtn').textContent = `${Math.round(state.canvasZoom * 100)} %`;
         });
         document.getElementById('canvasResetViewBtn').addEventListener('click', () => {
           state.canvasZoom = 1;
@@ -423,7 +433,7 @@
           stage.style.width = `${maxRight}px`;
           stage.style.height = `${maxBottom}px`;
           viewport.scrollTo({ left: 0, top: 0, behavior: 'smooth' });
-          document.getElementById('canvasZoomLabel').textContent = '100 %';
+          document.getElementById('canvasResetViewBtn').textContent = '100 %';
         });
         document.getElementById('canvasAutoLayoutBtn').addEventListener('click', () => {
           // Reihenfolge anhand aktueller visueller Position (Zeilenbänder auf Y, dann X) beibehalten
@@ -459,7 +469,8 @@
           scheduleBoardSave(folderId);
         }
 
-        document.getElementById('canvasFitBtn').addEventListener('click', () => {
+        const fitBtn = document.getElementById('canvasFitBtn');
+        if (fitBtn) fitBtn.addEventListener('click', () => {
           const selItems = visualItems.filter((it) => state.selectedCanvasIds.has(it.id));
           if (selItems.length > 0) {
             const allContain = selItems.every((it) => (it.canvas.fitMode || fitMode) === 'contain');
@@ -475,7 +486,8 @@
           renderCanvasView(container, statsEl, folderId);
         });
 
-        document.getElementById('canvasRatioSelect').addEventListener('change', (e) => {
+        const ratioSel = document.getElementById('canvasRatioSelect');
+        if (ratioSel) ratioSel.addEventListener('change', (e) => {
           const mode = e.target.value;
           if (!mode) return;
           const targets = state.selectedCanvasIds.size > 0
@@ -783,12 +795,24 @@
 
         const optBtn = document.getElementById('canvasOptionsBtn');
         const optPop = document.getElementById('canvasOptionsPopover');
+        const addMenuBtn = document.getElementById('canvasAddMenuBtn');
+        const addMenuPop = document.getElementById('canvasAddMenuPopover');
         optBtn.addEventListener('click', (e) => {
           e.stopPropagation();
+          addMenuPop.classList.add('hidden');
           optPop.classList.toggle('hidden');
         });
         optPop.addEventListener('click', (e) => e.stopPropagation());
-        document.addEventListener('click', () => optPop.classList.add('hidden'), { once: true });
+        addMenuBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          optPop.classList.add('hidden');
+          addMenuPop.classList.toggle('hidden');
+        });
+        addMenuPop.addEventListener('click', (e) => e.stopPropagation());
+        document.addEventListener('click', () => {
+          optPop.classList.add('hidden');
+          addMenuPop.classList.add('hidden');
+        }, { once: true });
 
         if (state.canvasSplitOpen) {
           const splitEl = document.getElementById('canvasSplitPanel');
