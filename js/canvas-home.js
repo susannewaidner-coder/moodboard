@@ -1066,20 +1066,21 @@
           if (e.target.closest('[data-canvas-link]')) return;
           const itemEl = e.target.closest('.canvas-item');
           if (!itemEl) {
+            const hadSelection = !e.shiftKey && state.selectedCanvasIds.size > 0;
             if (!e.shiftKey) {
               state.selectedCanvasIds.clear();
               stage.querySelectorAll('.canvas-item').forEach((el) => el.classList.remove('selected'));
               updatePaletteBar();
-              renderCanvasView(container, statsEl, folderId);
             }
             activeAction = {
               type: 'pan',
+              selectionCleared: hadSelection,
               startX: e.clientX,
               startY: e.clientY,
               origScrollX: viewport.scrollLeft,
               origScrollY: viewport.scrollTop
             };
-            viewport.setPointerCapture(e.pointerId);
+            try { if (viewport.isConnected) viewport.setPointerCapture(e.pointerId); } catch (err) {}
             return;
           }
 
@@ -1125,7 +1126,7 @@
             origH: box.h
           };
           pushCanvasUndo(folderId);
-          viewport.setPointerCapture(e.pointerId);
+          try { if (viewport.isConnected) viewport.setPointerCapture(e.pointerId); } catch (err) {}
         });
 
         viewport.addEventListener('pointermove', (e) => {
@@ -1160,10 +1161,14 @@
         });
 
         viewport.addEventListener('pointerup', () => {
-          if (activeAction && (activeAction.type === 'drag' || activeAction.type === 'resize')) {
-            if (activeAction.moved) scheduleBoardSave(folderId);
-            else if (activeAction.undoPushed) getCanvasUndoStack(folderId).pop();
-            if (activeAction.selectionChanged) renderCanvasView(container, statsEl, folderId);
+          if (activeAction) {
+            if (activeAction.type === 'pan' && activeAction.selectionCleared) {
+              renderCanvasView(container, statsEl, folderId);
+            } else if (activeAction.type === 'drag' || activeAction.type === 'resize') {
+              if (activeAction.moved) scheduleBoardSave(folderId);
+              else if (activeAction.undoPushed) getCanvasUndoStack(folderId).pop();
+              if (activeAction.selectionChanged) renderCanvasView(container, statsEl, folderId);
+            }
           }
           activeAction = null;
         });
