@@ -4,7 +4,7 @@
       /* ========================================================================
          1. KONFIGURATION & STATE
          ======================================================================== */
-      const APP_VERSION = 'v1.0.21';
+      const APP_VERSION = 'v1.0.22';
       const LS_KEYS = {
         clientId: 'mb_oauth_client_id',
         rootName: 'mb_root_folder_name',
@@ -39,7 +39,9 @@
         dirtyFolders: new Set(),
         savingFolders: new Set(),
         resaveFolders: new Set(),
-        saveTimer: null,
+        saveTimers: {},
+        selectedGalleryIds: new Set(),
+        gallerySelectMode: false,
         editingItem: null,
         pendingConflict: null,
         canvasZoom: 1,
@@ -813,6 +815,8 @@
       async function openFolder(folderId) {
         state.activeFolderId = folderId;
         state.quickView = null;
+        state.selectedGalleryIds.clear();
+        state.gallerySelectMode = false;
         saveNavState();
         revokeAllObjectUrls();
         renderSidebar();
@@ -860,7 +864,8 @@
                   title: df.name.replace(/\.[^.]+$/, ''),
                   sourceUrl: '',
                   note: '',
-                  tags: []
+                  tags: [],
+                  shopping: { enabled: false, price: 0, quantity: 1, status: 'bought' }
                 });
                 addedNew = true;
               }
@@ -890,8 +895,11 @@
           return;
         }
 
-        clearTimeout(state.saveTimer);
-        state.saveTimer = setTimeout(() => saveBoardNow(folderId), 700);
+        clearTimeout(state.saveTimers[folderId]);
+        state.saveTimers[folderId] = setTimeout(() => {
+          delete state.saveTimers[folderId];
+          saveBoardNow(folderId);
+        }, 700);
       }
 
       async function saveBoardNow(folderId, forceOverwrite = false) {
