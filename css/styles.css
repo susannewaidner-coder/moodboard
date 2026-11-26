@@ -1546,3 +1546,81 @@
       height: 100%;
       object-fit: cover;
     }
+
+    /* Tag-Picker im Bearbeiten-Modal */
+    .tag-picker-box {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 10px;
+      max-height: 148px;
+      overflow-y: auto;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      background-color: var(--card-subtle);
+      margin-bottom: 6px;
+    }
+
+    .tag-pick-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+      border: 1px solid var(--border-color);
+      background-color: var(--card-bg);
+      color: var(--text-secondary);
+      font-size: 0.78rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.14s ease;
+    }
+
+    .tag-pick-chip:hover {
+      border-color: var(--accent-oak);
+      color: var(--text-primary);
+    }
+
+    .tag-pick-chip.active {
+      background-color: var(--accent-fir);
+      border-color: var(--accent-fir);
+      color: #FFFFFF;
+    }
+
+    /* Mehrfachauswahl & Bulk-Aktionsleiste in der Galerie */
+    .item-select-cb {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      z-index: 3;
+      width: 22px;
+      height: 22px;
+      accent-color: var(--accent-fir);
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity 0.14s ease;
+    }
+
+    .item-card:hover .item-select-cb,
+    .item-select-cb:checked,
+    .select-mode .item-select-cb {
+      opacity: 1;
+    }
+
+    .item-card.bulk-selected {
+      outline: 2px solid var(--accent-fir);
+      outline-offset: 2px;
+    }
+
+    .bulk-action-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 10px 14px;
+      margin-bottom: 12px;
+      border-radius: var(--radius-md);
+      background-color: var(--card-subtle);
+      border: 1px solid var(--accent-fir);
+    }
