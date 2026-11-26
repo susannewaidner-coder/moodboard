@@ -1063,6 +1063,11 @@
       border-radius: 50%;
     }
 
+    .canvas-item.bg-removed {
+      box-shadow: none !important;
+      background-color: transparent !important;
+    }
+
     .canvas-item.shape-circle .canvas-resize-handle {
       right: 14%;
       bottom: 14%;
