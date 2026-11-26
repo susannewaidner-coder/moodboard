@@ -1063,7 +1063,7 @@
         });
 
         viewport.addEventListener('pointerdown', (e) => {
-          if (e.target.closest('[data-canvas-link]')) return;
+          if (e.target.closest('[data-canvas-link], button, a, input, select')) return;
           const itemEl = e.target.closest('.canvas-item');
           if (!itemEl) {
             const hadSelection = !e.shiftKey && state.selectedCanvasIds.size > 0;
