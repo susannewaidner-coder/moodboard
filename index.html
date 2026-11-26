@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>Moodboard &amp; Projekt-Planer — Google Drive</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <link rel="stylesheet" href="css/styles.css?v=1.0.15" />
+  <link rel="stylesheet" href="css/styles.css?v=1.0.16" />
 </head>
 </head>
 <body>
@@ -352,6 +352,44 @@
   <!-- ======================================================================
        MODAL: UNIVERSELLES DIALOG-MODAL (ERSETZT ALERT / CONFIRM / PROMPT)
        ====================================================================== -->
+  <!-- ======================================================================
+       MODAL: RAINDROP CSV IMPORTER
+       ====================================================================== -->
+  <div id="raindropImportModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="raindropImportTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="raindropImportTitle" class="modal-title">📥 Raindrop CSV importieren</h2>
+        <button class="btn-icon" data-close-modal="raindropImportModal" type="button">✕</button>
+      </div>
+      <p style="font-size:0.84rem; color:var(--text-secondary); margin-top:0;">
+        Importiere eine aus Raindrop.io exportierte <code>.csv</code>-Datei direkt in den aktuell geöffneten Ordner.
+      </p>
+      <div class="form-group">
+        <label class="form-label" for="raindropCsvInput">CSV-Datei auswählen</label>
+        <input id="raindropCsvInput" class="form-control" type="file" accept=".csv,text/csv" />
+        <div id="raindropCsvSummary" class="form-hint">Noch keine Datei ausgewählt.</div>
+      </div>
+      <div class="form-group" style="display:flex; flex-direction:column; gap:8px; font-size:0.84rem;">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+          <input id="raindropCreateSubfoldersCb" type="checkbox" checked />
+          <span>Unterordner aus CSV automatisch anlegen (z. B. <em>Storage</em>)</span>
+        </label>
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+          <input id="raindropUploadImagesCb" type="checkbox" checked />
+          <span>Erreichbare Bilder direkt in Google Drive speichern (CORS-abhängig)</span>
+        </label>
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+          <input id="raindropImportTagsCb" type="checkbox" />
+          <span>Unbekannte Tags aus CSV in meine Tag-Liste übernehmen</span>
+        </label>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" data-close-modal="raindropImportModal" type="button">Abbrechen</button>
+        <button id="startRaindropImportBtn" class="btn btn-primary" type="button" disabled>Import starten</button>
+      </div>
+    </div>
+  </div>
+
   <div id="uiDialogModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="uiDialogTitle" style="z-index:150;">
     <div class="modal-card" style="max-width:440px;">
       <div class="modal-header">
@@ -367,9 +405,9 @@
     </div>
   </div>
 
-  <script defer src="js/core.js?v=1.0.15"></script>
-  <script defer src="js/views.js?v=1.0.15"></script>
-  <script defer src="js/canvas-home.js?v=1.0.15"></script>
-  <script defer src="js/ai-pdf.js?v=1.0.15"></script>
+  <script defer src="js/core.js?v=1.0.16"></script>
+  <script defer src="js/views.js?v=1.0.16"></script>
+  <script defer src="js/canvas-home.js?v=1.0.16"></script>
+  <script defer src="js/ai-pdf.js?v=1.0.16"></script>
 </body>
 </html>
