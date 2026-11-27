@@ -1570,18 +1570,22 @@
               break;
             }
             let chosenCount = Math.min(perRowMax, remaining);
-            for (let c = 2; c <= Math.min(perRowMax, remaining); c++) {
-              // Vermeide, dass genau 1 Bild übrig bleibt
-              if (remaining - c === 1) continue;
-              const slice = remIds.slice(rIdx, rIdx + c);
-              const sumAr = slice.reduce((s, id) => s + Math.max(0.45, Math.min(2.1, getImgAr(id))), 0);
-              const estH = (boardW - gap * (c - 1)) / sumAr;
-              chosenCount = c;
-              if (estH <= targetMaxH && estH >= targetMinH) break;
-              if (estH < targetMinH) {
-                chosenCount = Math.max(2, c - 1);
-                if (remaining - chosenCount === 1 && c <= remaining) chosenCount = c;
-                break;
+            if (remaining >= 6 && remaining <= 8 && perRowMax >= 5) {
+              chosenCount = Math.ceil(remaining / 2);
+            } else {
+              for (let c = 2; c <= Math.min(perRowMax, remaining); c++) {
+                // Vermeide, dass genau 1 oder 2 Bilder am Ende übrig bleiben
+                if (remaining - c === 1 || (remaining >= 5 && remaining - c === 2)) continue;
+                const slice = remIds.slice(rIdx, rIdx + c);
+                const sumAr = slice.reduce((s, id) => s + Math.max(0.45, Math.min(2.1, getImgAr(id))), 0);
+                const estH = (boardW - gap * (c - 1)) / sumAr;
+                chosenCount = c;
+                if (estH <= targetMaxH && estH >= targetMinH) break;
+                if (estH < targetMinH) {
+                  chosenCount = Math.max(2, c - 1);
+                  if ((remaining - chosenCount === 1 || (remaining >= 5 && remaining - chosenCount === 2)) && c <= remaining) chosenCount = c;
+                  break;
+                }
               }
             }
             if (remaining - chosenCount === 1 && chosenCount > 2) chosenCount--;
@@ -1591,9 +1595,9 @@
         }
 
         if (chosenStyle === 'collage-wide') {
-          // Beispiel 1: Senkrechte Palette oben links + dichte Panorama-Collage daneben/darunter + überlappende Kreise
-          const palW = 300;
-          const topH = 210;
+          // Beispiel 1: 5 hohe Farbstreifen oben links, reinweißer Hintergrund (#FFFFFF) & überlappende Collage-Elemente
+          const palW = 320;
+          const topH = 220;
           elements.push({
             id: uid('cel'),
             type: 'palette',
@@ -1604,7 +1608,7 @@
             z: 18,
             colors: palColors.slice(0, 5),
             shape: 'rect',
-            orientation: 'vertical'
+            orientation: 'horizontal'
           });
           const topCount = Math.min(3, gridIds.length);
           if (topCount > 0) {
@@ -1613,14 +1617,25 @@
             curY += topH + gap;
           }
           layoutRemainingRows(gridIds.slice(topCount), 6);
+          // Leichte weiße Collage-Ränder & leichte Überlappung bei einem Akzentbild
+          itemsLayout.forEach((it) => {
+            it.frameColor = '#FFFFFF';
+            it.frameWidth = 6;
+            it.shadow = false;
+          });
+          if (itemsLayout.length >= 5) {
+            const overlapTile = itemsLayout[3];
+            overlapTile.y = Math.max(40, overlapTile.y - 26);
+            overlapTile.z = 22;
+          }
           const circleList = Array.from(circleSet);
           if (circleList[0]) {
-            itemsLayout.push({ id: circleList[0], x: startX + Math.round(boardW * 0.62), y: 120, w: 185, h: 185, z: 24, shape: 'circle', frameColor: '#FFFFFF', frameWidth: 6, shadow: true });
+            itemsLayout.push({ id: circleList[0], x: startX + Math.round(boardW * 0.62), y: 120, w: 195, h: 195, z: 24, shape: 'circle', frameColor: '#FFFFFF', frameWidth: 8, shadow: false });
           }
           if (circleList[1]) {
-            itemsLayout.push({ id: circleList[1], x: startX + Math.round(boardW * 0.24), y: Math.max(180, curY - 220), w: 175, h: 175, z: 25, shape: 'circle', frameColor: '#FFFFFF', frameWidth: 6, shadow: true });
+            itemsLayout.push({ id: circleList[1], x: startX + Math.round(boardW * 0.24), y: Math.max(180, curY - 215), w: 185, h: 185, z: 25, shape: 'circle', frameColor: '#FFFFFF', frameWidth: 8, shadow: false });
           }
-          return { bgColor: director.bgColor || '#FFFFFF', collageMode: true, items: itemsLayout, elements };
+          return { bgColor: '#FFFFFF', collageMode: true, items: itemsLayout, elements };
         }
 
         if (chosenStyle === 'brand-header') {
