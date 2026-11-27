@@ -1135,12 +1135,15 @@
         const msg = isRef
           ? 'Verknüpfung aus diesem Projekt entfernen? (Das Original im Inventory bleibt erhalten.)'
           : (isInv
-            ? 'Dieses Original-Element wirklich aus dem Inventory löschen? Verknüpfungen in Projekten verlieren dann ihr Bild.'
+            ? 'Dieses Original-Element wirklich aus dem Inventory löschen? Zugehörige Verknüpfungen in Projekten werden ebenfalls entfernt.'
             : 'Dieses Element wirklich entfernen?');
         if (!(await uiConfirm(msg, isRef ? 'Verknüpfung entfernen' : 'Element löschen', isRef ? 'Entfernen' : 'Löschen'))) return;
 
         content.board.items = content.board.items.filter((i) => i.id !== itemId);
         scheduleBoardSave(targetFolderId);
+        if (isInv && !isRef) {
+          await removeInventoryRefsAcrossProjects(new Set([itemId]));
+        }
         if (!isRef && item.driveFileId && state.mode === 'drive') {
           try { await DriveAdapter.trashFile(item.driveFileId); } catch (e) { console.warn(e); }
         }
@@ -2264,6 +2267,27 @@
         });
       }
 
+      async function removeInventoryRefsAcrossProjects(deletedIds) {
+        if (!deletedIds || deletedIds.size === 0) return;
+        const projIds = state.folders.filter((f) => !isInventoryFolder(f.id)).map((f) => f.id);
+        for (const pId of projIds) {
+          if (!state.folderContents[pId] && state.mode === 'drive') {
+            try { await loadFolderContent(pId); } catch (e) { continue; }
+          }
+          const pFc = state.folderContents[pId];
+          if (!pFc || !pFc.board || !Array.isArray(pFc.board.items)) continue;
+          const before = pFc.board.items.length;
+          pFc.board.items = pFc.board.items.filter((it) => !(it.type === 'ref' && deletedIds.has(it.refItemId)) && !(it.kind === 'inventoryRef' && deletedIds.has(it.inventoryId)));
+          if (pFc.board.items.length !== before) {
+            if (state.mode === 'drive') {
+              try { await saveBoardNow(pId, true); } catch (e) { scheduleBoardSave(pId); }
+            } else {
+              scheduleBoardSave(pId);
+            }
+          }
+        }
+      }
+
       async function bulkDeleteItems(folderId) {
         const fc = state.folderContents[folderId];
         if (!fc) return;
@@ -2271,10 +2295,18 @@
         const docTargets = (fc.driveFiles || []).filter((df) => state.selectedGalleryIds.has('doc:' + df.id));
         const total = targets.length + docTargets.length;
         if (total === 0) return;
-        if (!(await uiConfirm(`${total} ausgewählte(s) Element(e) wirklich entfernen/löschen?`, 'Mehrfachauswahl löschen', 'Löschen'))) return;
+        const isInv = isInventoryFolder(folderId);
+        const confirmMsg = isInv
+          ? `${total} ausgewählte(s) Element(e) wirklich aus dem Inventory löschen? Zugehörige Verknüpfungen in Projekten werden ebenfalls entfernt.`
+          : `${total} ausgewählte(s) Element(e) wirklich entfernen/löschen?`;
+        if (!(await uiConfirm(confirmMsg, 'Mehrfachauswahl löschen', 'Löschen'))) return;
         if (targets.length > 0) {
           fc.board.items = (fc.board.items || []).filter((it) => !state.selectedGalleryIds.has(it.id));
           scheduleBoardSave(folderId);
+          if (isInv) {
+            const deletedOrigIds = new Set(targets.filter((it) => it.type !== 'ref').map((it) => it.id));
+            await removeInventoryRefsAcrossProjects(deletedOrigIds);
+          }
         }
         if (docTargets.length > 0) {
           fc.driveFiles = (fc.driveFiles || []).filter((df) => !state.selectedGalleryIds.has('doc:' + df.id));
