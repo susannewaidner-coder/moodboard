@@ -1626,8 +1626,39 @@
         }
         const { geminiKey } = getSettings();
         const folder = state.folders.find((f) => f.id === folderId);
-        const home = content.board.projectHome || {};
-        const projectTitle = home.title || (folder ? folder.name : 'Moodboard');
+        let home = content.board.projectHome || {};
+
+        // Falls wir in einem Unterordner sind: Swatches & Leitidee vom übergeordneten Hauptprojekt erben
+        if (!Array.isArray(home.swatches) || home.swatches.length === 0) {
+          const ancestorIds = [];
+          let cur = folder;
+          const seen = new Set([folderId]);
+          while (cur && cur.parents && cur.parents[0] && cur.parents[0] !== state.rootFolderId && !seen.has(cur.parents[0])) {
+            seen.add(cur.parents[0]);
+            ancestorIds.push(cur.parents[0]);
+            cur = state.folders.find((f) => f.id === cur.parents[0]);
+          }
+          if (ancestorIds.length > 0) {
+            await ensureFoldersLoaded(ancestorIds);
+            for (const aId of ancestorIds) {
+              const aHome = state.folderContents[aId]?.board?.projectHome;
+              if (aHome && Array.isArray(aHome.swatches) && aHome.swatches.length > 0) {
+                home = {
+                  ...aHome,
+                  ...home,
+                  swatches: aHome.swatches,
+                  lead: home.lead || aHome.lead || '',
+                  eyebrow: home.eyebrow || aHome.eyebrow || ''
+                };
+                break;
+              }
+            }
+          }
+        }
+
+        const projectTitle = (content.board.projectHome && content.board.projectHome.title && content.board.projectHome.title !== 'Projekt')
+          ? content.board.projectHome.title
+          : (folder ? folder.name : 'Moodboard');
         const imgs = Array.from(stage.querySelectorAll('.canvas-item img'));
         const extracted = extractColorsFromImages(imgs, 8).filter((h) => h !== '#FFFFFF' && h !== '#000000');
         const swatchHexes = (home.swatches || []).map((s) => s.hex).filter(Boolean);
