@@ -955,11 +955,21 @@
             uiAlert('Bitte füge zuerst mindestens ein Bild oder Element zum Moodboard hinzu.');
             return;
           }
+          const heroSel = document.getElementById('aiLayoutHeroSelect');
+          if (heroSel) {
+            heroSel.innerHTML = `<option value="">✨ KI wählt automatisch</option>` +
+              visualItems.map((it) => {
+                const res = resolveBoardItem(it, folderId);
+                return `<option value="${escapeHtml(it.id)}">${escapeHtml(res.title || 'Bild')}</option>`;
+              }).join('');
+          }
           document.getElementById('aiLayoutRunBtn').onclick = async () => {
             const keepFormatting = document.getElementById('aiLayoutKeepFormatCb').checked;
             const keepElements = document.getElementById('aiLayoutKeepElementsCb').checked;
+            const heroId = document.getElementById('aiLayoutHeroSelect')?.value || '';
+            const layoutStyle = document.getElementById('aiLayoutStyleSelect')?.value || 'auto';
             closeModal('aiLayoutModal');
-            await generateAiMoodboardLayout(folderId, visualItems, content, stage, container, statsEl, { keepFormatting, keepElements });
+            await generateAiMoodboardLayout(folderId, visualItems, content, stage, container, statsEl, { keepFormatting, keepElements, heroId, layoutStyle });
           };
           openModal('aiLayoutModal');
         });
@@ -1454,7 +1464,8 @@
         }
       }
 
-      function buildEditorialGridPlan(visualItems, director, projectTitle, fallbackPalette, keepFormatting = false) {
+      function buildEditorialGridPlan(visualItems, director, projectTitle, fallbackPalette, keepFormatting = false, opts = {}) {
+        const { heroId = '', layoutStyle = 'auto' } = opts;
         const gap = 14;
         const boardW = 840;
         const startX = 40;
@@ -1475,17 +1486,27 @@
             return it && it.canvas && it.canvas.shape === 'circle';
           }));
         } else {
-          circleSet = new Set(Array.isArray(director.circleIds) ? director.circleIds.filter((id) => idMap.has(id)).slice(0, 2) : []);
+          circleSet = new Set(Array.isArray(director.circleIds) ? director.circleIds.filter((id) => idMap.has(id) && id !== heroId).slice(0, 2) : []);
           if (circleSet.size === 0 && orderedIds.length >= 6) {
-            circleSet.add(orderedIds[orderedIds.length - 1]);
+            const fallbackCircle = orderedIds.find((id) => id !== heroId) || orderedIds[orderedIds.length - 1];
+            if (fallbackCircle && fallbackCircle !== heroId) circleSet.add(fallbackCircle);
           }
         }
 
-        const gridIds = orderedIds.filter((id) => !circleSet.has(id));
+        let gridIds = orderedIds.filter((id) => !circleSet.has(id));
+        if (heroId && idMap.has(heroId)) {
+          circleSet.delete(heroId);
+          gridIds = [heroId, ...gridIds.filter((id) => id !== heroId)];
+        }
+
+        const validStyles = ['hero-left', 'hero-right', 'minimalist-tall', 'gallery-grid'];
+        const chosenStyle = layoutStyle !== 'auto' && validStyles.includes(layoutStyle)
+          ? layoutStyle
+          : (validStyles.includes(director.layoutStyle) ? director.layoutStyle : validStyles[Math.floor(Math.random() * validStyles.length)]);
+
         const itemsLayout = [];
         let zCounter = 1;
 
-        // Hilfsfunktion: Reihe mit exakt bündiger Breite boardW & gleicher Höhe
         function layoutRow(rowIds, rowH) {
           if (rowIds.length === 0) return;
           const totalGap = gap * (rowIds.length - 1);
@@ -1506,21 +1527,48 @@
           curY += rowH + gap;
         }
 
-        // 1) Hero-Block oben (falls >= 3 Grid-Bilder: 1 großes links + 2 gestapelt rechts, sonst 1 Reihe)
         let cursor = 0;
-        if (gridIds.length >= 3) {
-          const heroId = gridIds[0];
-          const r1Id = gridIds[1];
-          const r2Id = gridIds[2];
+        let heroSplitX = startX + Math.round(boardW * 0.58);
+        if (chosenStyle === 'minimalist-tall' && gridIds.length >= 4) {
+          const leftTotalW = Math.round(boardW * 0.65);
+          const rightW = boardW - leftTotalW - gap;
+          const topH = 200;
+          const midH = 260;
+          const tallH = topH + gap + midH;
+          const halfLeftW = Math.round((leftTotalW - gap) / 2);
+          itemsLayout.push({ id: gridIds[0], x: startX, y: curY, w: leftTotalW, h: topH, z: zCounter++, shape: 'rect', frameColor: '', shadow: false });
+          itemsLayout.push({ id: gridIds[1], x: startX, y: curY + topH + gap, w: halfLeftW, h: midH, z: zCounter++, shape: 'rect', frameColor: '', shadow: false });
+          itemsLayout.push({ id: gridIds[2], x: startX + halfLeftW + gap, y: curY + topH + gap, w: leftTotalW - halfLeftW - gap, h: midH, z: zCounter++, shape: 'rect', frameColor: '', shadow: false });
+          itemsLayout.push({ id: gridIds[3], x: startX + leftTotalW + gap, y: curY, w: rightW, h: tallH, z: zCounter++, shape: 'rect', frameColor: '', shadow: false });
+          curY += tallH + gap;
+          cursor = 4;
+          heroSplitX = startX + halfLeftW;
+        } else if (chosenStyle === 'gallery-grid' && gridIds.length >= 2) {
+          layoutRow(gridIds.slice(0, 2), 270);
+          cursor = 2;
+          heroSplitX = startX + Math.round(boardW * 0.5);
+        } else if (chosenStyle === 'hero-right' && gridIds.length >= 3) {
+          const rightW = Math.round(boardW * 0.58) - Math.round(gap / 2);
+          const leftW = boardW - rightW - gap;
+          const heroH = 340;
+          const subH = Math.round((heroH - gap) / 2);
+          itemsLayout.push({ id: gridIds[1], x: startX, y: curY, w: leftW, h: subH, z: zCounter++, shape: 'rect', frameColor: '', shadow: false });
+          itemsLayout.push({ id: gridIds[2], x: startX, y: curY + subH + gap, w: leftW, h: heroH - subH - gap, z: zCounter++, shape: 'rect', frameColor: '', shadow: false });
+          itemsLayout.push({ id: gridIds[0], x: startX + leftW + gap, y: curY, w: rightW, h: heroH, z: zCounter++, shape: 'rect', frameColor: '', shadow: false });
+          curY += heroH + gap;
+          cursor = 3;
+          heroSplitX = startX + leftW;
+        } else if (gridIds.length >= 3) {
           const leftW = Math.round(boardW * 0.58) - Math.round(gap / 2);
           const rightW = boardW - leftW - gap;
           const heroH = 340;
           const subH = Math.round((heroH - gap) / 2);
-          itemsLayout.push({ id: heroId, x: startX, y: curY, w: leftW, h: heroH, z: zCounter++, shape: 'rect', frameColor: '', shadow: false });
-          itemsLayout.push({ id: r1Id, x: startX + leftW + gap, y: curY, w: rightW, h: subH, z: zCounter++, shape: 'rect', frameColor: '', shadow: false });
-          itemsLayout.push({ id: r2Id, x: startX + leftW + gap, y: curY + subH + gap, w: rightW, h: heroH - subH - gap, z: zCounter++, shape: 'rect', frameColor: '', shadow: false });
+          itemsLayout.push({ id: gridIds[0], x: startX, y: curY, w: leftW, h: heroH, z: zCounter++, shape: 'rect', frameColor: '', shadow: false });
+          itemsLayout.push({ id: gridIds[1], x: startX + leftW + gap, y: curY, w: rightW, h: subH, z: zCounter++, shape: 'rect', frameColor: '', shadow: false });
+          itemsLayout.push({ id: gridIds[2], x: startX + leftW + gap, y: curY + subH + gap, w: rightW, h: heroH - subH - gap, z: zCounter++, shape: 'rect', frameColor: '', shadow: false });
           curY += heroH + gap;
           cursor = 3;
+          heroSplitX = startX + leftW;
         }
 
         const paletteY = curY;
@@ -1547,7 +1595,27 @@
         ];
         curY += 54 + gap;
 
-        // 2) Restliche Bilder in saubere 3er- oder 2er-Reihen aufteilen (ohne Rest-Lücke!)
+        if (chosenStyle === 'gallery-grid') {
+          elements.push({
+            id: uid('cel'),
+            type: 'text',
+            x: startX,
+            y: curY,
+            w: boardW,
+            h: 56,
+            z: 20,
+            text: (director.badgeText || projectTitle || 'MOODBOARD').toUpperCase(),
+            fontSize: 34,
+            fontStyle: 'outline',
+            textAlign: 'center',
+            color: palColors[0] || '#8C7A5B',
+            bgColor: '#262927',
+            shape: 'none',
+            frame: false
+          });
+          curY += 56 + gap;
+        }
+
         const rest = gridIds.slice(cursor);
         let rIdx = 0;
         while (rIdx < rest.length) {
@@ -1559,12 +1627,11 @@
           rIdx += count;
         }
 
-        // 3) Kreis-Details sauber auf Schnittpunkte setzen
         const circleList = Array.from(circleSet);
         if (circleList[0]) {
           itemsLayout.push({
             id: circleList[0],
-            x: startX + Math.round(boardW * 0.58) - 85,
+            x: heroSplitX - 85,
             y: Math.max(40, paletteY - 125),
             w: 170,
             h: 170,
@@ -1590,25 +1657,28 @@
           });
         }
 
-        // 4) Typo-Badge (dunkler Kreis mit weißem Rand wie im Minimalist-Beispiel)
-        elements.push({
-          id: uid('cel'),
-          type: 'text',
-          x: startX + 24,
-          y: paletteY - 115,
-          w: 155,
-          h: 155,
-          z: 26,
-          text: director.badgeText || projectTitle || 'Moodboard',
-          fontSize: 18,
-          fontStyle: 'sans',
-          textAlign: 'center',
-          color: '#FFFFFF',
-          bgColor: director.badgeBg || '#262927',
-          shape: 'circle',
-          frame: true,
-          frameColor: '#FFFFFF'
-        });
+        if (chosenStyle !== 'gallery-grid') {
+          const badgeX = chosenStyle === 'hero-right' ? (startX + boardW - 180) : (chosenStyle === 'minimalist-tall' ? (heroSplitX - 78) : (startX + 24));
+          const badgeY = chosenStyle === 'minimalist-tall' ? 160 : (paletteY - 115);
+          elements.push({
+            id: uid('cel'),
+            type: 'text',
+            x: badgeX,
+            y: Math.max(40, badgeY),
+            w: 155,
+            h: 155,
+            z: 26,
+            text: director.badgeText || projectTitle || 'Moodboard',
+            fontSize: 18,
+            fontStyle: 'sans',
+            textAlign: 'center',
+            color: '#FFFFFF',
+            bgColor: director.badgeBg || '#262927',
+            shape: 'circle',
+            frame: true,
+            frameColor: '#FFFFFF'
+          });
+        }
 
         return {
           bgColor: director.bgColor || '#F6F4EF',
@@ -1619,7 +1689,7 @@
       }
 
       async function generateAiMoodboardLayout(folderId, visualItems, content, stage, container, statsEl, opts = {}) {
-        const { keepFormatting = false, keepElements = false } = opts;
+        const { keepFormatting = false, keepElements = false, heroId = '', layoutStyle = 'auto' } = opts;
         if (visualItems.length === 0) {
           await uiAlert('Bitte füge zuerst mindestens ein Bild oder Element zum Moodboard hinzu.');
           return;
@@ -1687,7 +1757,8 @@
 Projekt: ${JSON.stringify({ title: projectTitle, eyebrow: home.eyebrow || '', lead: home.lead || '', swatches: home.swatches || [], extractedColors: fallbackPalette })}
 Bilder: ${JSON.stringify(itemInfos)}
 Regeln:
-- "orderedIds": Alle Bild-IDs in harmonischer Reihenfolge. Das ERSTE Bild ist das große Hero-Bild (am besten ein stimmungsvolles Querformat/Szene-Bild). Danach 2 passende Ergänzungsbilder, dann weitere thematisch/farblich gruppiert.
+- "layoutStyle": Wähle passend zu den Bildformaten eine dieser 4 Vorlagen: "hero-left", "hero-right", "minimalist-tall", "gallery-grid".
+- "orderedIds": Alle Bild-IDs in harmonischer Reihenfolge. Das ERSTE Bild ist das große Hero-Bild (wähle bevorzugt ein stimmungsvolles Querformat-/Szene-Bild mit aspectRatioHtoW <= 1.05, KEIN schmales freigestelltes Einzelobjekt).${heroId ? ` WICHTIG: Das Bild "${heroId}" ist fest als Hero-Bild gewählt und MUSS an erster Stelle stehen.` : ''}
 - "circleIds": 1-2 IDs von Detail-/Akzentbildern (z. B. kleines Deko-Objekt), die als runde Kreis-Ausschnitte hervorgehoben werden.
 - "bgColor": Eine sehr dezente, helle Hintergrundfarbe als Hex passend zum Thema (z. B. "#F6F2EA", "#F3F5F8", "#F4F6F2", "#FFFFFF").
 - "palette": Genau 5 harmonische Hex-Farben passend zu Projekt & Bildern (echte Akzent- und Materialfarben, nicht nur Grau).
@@ -1701,7 +1772,7 @@ Antworte ausschließlich als JSON.`;
           showSyncStatus('', false);
         }
 
-        const plan = buildEditorialGridPlan(visualItems, { ...(director || {}), prioritySwatches: swatchHexes }, projectTitle, fallbackPalette, keepFormatting);
+        const plan = buildEditorialGridPlan(visualItems, { ...(director || {}), prioritySwatches: swatchHexes }, projectTitle, fallbackPalette, keepFormatting, { heroId, layoutStyle });
 
         pushCanvasUndo(folderId);
 

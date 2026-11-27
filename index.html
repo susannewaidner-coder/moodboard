@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>Moodboard &amp; Projekt-Planer — Google Drive</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <link rel="stylesheet" href="css/styles.css?v=1.0.45" />
+  <link rel="stylesheet" href="css/styles.css?v=1.0.46" />
 </head>
 </head>
 <body>
@@ -606,6 +606,24 @@
       <p style="font-size:0.84rem; color:var(--text-secondary); margin-top:0;">
         Ordnet alle sichtbaren Elemente im Editorial-Collage-Stil an. (Über <strong>↩️ Rückgängig</strong> jederzeit umkehrbar.)
       </p>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label" for="aiLayoutStyleSelect">Layout-Stil</label>
+          <select id="aiLayoutStyleSelect" class="form-control">
+            <option value="auto">✨ KI wählt passend</option>
+            <option value="hero-left">Hero links (Editorial)</option>
+            <option value="hero-right">Hero rechts (Gespiegelt)</option>
+            <option value="minimalist-tall">Minimalist (Hochformat rechts)</option>
+            <option value="gallery-grid">Galerie (2+3 Raster)</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label" for="aiLayoutHeroSelect">Hero-Bild</label>
+          <select id="aiLayoutHeroSelect" class="form-control">
+            <option value="">✨ KI wählt automatisch</option>
+          </select>
+        </div>
+      </div>
       <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:14px; font-size:0.85rem;">
         <label style="display:flex; align-items:flex-start; gap:8px; cursor:pointer;">
           <input id="aiLayoutKeepFormatCb" type="checkbox" checked style="margin-top:3px;" />
@@ -684,9 +702,9 @@
     </div>
   </div>
 
-  <script defer src="js/core.js?v=1.0.45"></script>
-  <script defer src="js/views.js?v=1.0.45"></script>
-  <script defer src="js/canvas-home.js?v=1.0.45"></script>
-  <script defer src="js/ai-pdf.js?v=1.0.45"></script>
+  <script defer src="js/core.js?v=1.0.46"></script>
+  <script defer src="js/views.js?v=1.0.46"></script>
+  <script defer src="js/canvas-home.js?v=1.0.46"></script>
+  <script defer src="js/ai-pdf.js?v=1.0.46"></script>
 </body>
 </html>
