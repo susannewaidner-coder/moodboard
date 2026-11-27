@@ -2021,8 +2021,8 @@
         }
 
         let gridIds = orderedIds.filter((id) => !circleSet.has(id));
-        // Bei festen Hero-Slots: canCrop=true-Bilder bevorzugen, damit canCrop=false-Objekte in passgenaue Reihen wandern
-        if (!['brand-header', 'collage-wide'].includes(chosenStyle) && !heroId) {
+        // Bei festen Hero- oder Top-Reihen-Slots: canCrop=true-Bilder bevorzugen, damit canCrop=false-Objekte in passgenaue Reihen wandern
+        if (!heroId) {
           const croppable = gridIds.filter((id) => canCropId(id));
           const nonCroppable = gridIds.filter((id) => !canCropId(id));
           if (croppable.length >= 3) gridIds = [...croppable, ...nonCroppable];
@@ -2050,7 +2050,7 @@
           const availW = rowW - totalGap;
           const aspects = rowIds.map((id) => Math.max(0.45, Math.min(2.1, getImgAr(id))));
           const sumAr = aspects.reduce((s, a) => s + a, 0);
-          const rowH = forcedH || Math.max(150, Math.min(340, Math.round(availW / sumAr)));
+          const rowH = forcedH || Math.max(95, Math.min(460, Math.round(availW / sumAr)));
           let curX = rowX;
           rowIds.forEach((id, idx) => {
             const isLast = idx === rowIds.length - 1;
@@ -2479,7 +2479,7 @@ Antworte ausschließlich als JSON.`;
               const imgAr = aspectWtoHMap.get(it.id) || 1;
               const tileAr = p.w / Math.max(1, p.h);
               const mismatch = Math.max(imgAr / tileAr, tileAr / imgAr);
-              const maxMismatch = cr.canCrop === false ? 1.18 : 1.55;
+              const maxMismatch = cr.canCrop === false ? 1.85 : 2.1;
               it.canvas.fitMode = (p.shape !== 'circle' && mismatch > maxMismatch) ? 'contain' : 'cover';
               delete it.canvas.frame;
             } else if (it.canvas.shape === 'circle') {
