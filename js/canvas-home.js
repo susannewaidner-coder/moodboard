@@ -1508,6 +1508,12 @@
         const isPanorama = ['collage-wide', 'brand-header'].includes(chosenStyle);
         const boardW = isPanorama ? 1440 : (isWide ? 1140 : 840);
 
+        const cropsMap = (director && typeof director.crops === 'object' && director.crops) ? director.crops : {};
+        const canCropId = (id) => {
+          const c = cropsMap[id];
+          return c && c.canCrop === false ? false : true;
+        };
+
         let circleSet;
         if (keepFormatting) {
           circleSet = new Set(orderedIds.filter((id) => {
@@ -1517,14 +1523,24 @@
         } else if (['brand-header', 'vision-board'].includes(chosenStyle)) {
           circleSet = new Set();
         } else {
-          circleSet = new Set(Array.isArray(director.circleIds) ? director.circleIds.filter((id) => idMap.has(id) && id !== heroId).slice(0, 2) : []);
+          circleSet = new Set(
+            (Array.isArray(director.circleIds) ? director.circleIds : [])
+              .filter((id) => idMap.has(id) && id !== heroId && canCropId(id))
+              .slice(0, 2)
+          );
           if (circleSet.size === 0 && orderedIds.length >= 6) {
-            const fallbackCircle = orderedIds.find((id) => id !== heroId) || orderedIds[orderedIds.length - 1];
+            const fallbackCircle = orderedIds.find((id) => id !== heroId && canCropId(id)) || orderedIds.find((id) => id !== heroId);
             if (fallbackCircle && fallbackCircle !== heroId) circleSet.add(fallbackCircle);
           }
         }
 
         let gridIds = orderedIds.filter((id) => !circleSet.has(id));
+        // Bei festen Hero-Slots: canCrop=true-Bilder bevorzugen, damit canCrop=false-Objekte in passgenaue Reihen wandern
+        if (!['brand-header', 'collage-wide'].includes(chosenStyle) && !heroId) {
+          const croppable = gridIds.filter((id) => canCropId(id));
+          const nonCroppable = gridIds.filter((id) => !canCropId(id));
+          if (croppable.length >= 3) gridIds = [...croppable, ...nonCroppable];
+        }
         if (heroId && idMap.has(heroId)) {
           circleSet.delete(heroId);
           gridIds = [heroId, ...gridIds.filter((id) => id !== heroId)];
@@ -1938,7 +1954,8 @@ Bilder: ${JSON.stringify(itemInfos)}
 Regeln:
 - "layoutStyle": Wähle passend zu Projekt, Bildern und Stil-Hinweis eine dieser 6 Vorlagen: "collage-wide" (quer mit vertikaler Palette links & überlappenden Kreisen), "brand-header" (quer mit Header-Zeile oben & dichtem Raster), "vision-board" (quer mit vertikaler Swatch-Spalte links & farbigem Textblock), "minimalist-tall" (hochkant mit hoher rechter Spalte), "hero-left", "hero-right".${styleHint ? ` Nutzerwunsch / Stil-Hinweis: "${styleHint}".` : ''}
 - "orderedIds": Alle Bild-IDs in harmonischer Reihenfolge. Das ERSTE Bild ist das große Hero-Bild (wähle anhand der Vorschaubilder ein stimmungsvolles Szene-/Ambiente-Foto, KEIN weißes freigestelltes Einzelobjekt).${heroId ? ` WICHTIG: Das Bild "${heroId}" ist fest als Hero-Bild gewählt und MUSS an erster Stelle stehen.` : ''} Gruppiere ähnliche Stimmungen/Farbwerte (z. B. dunkle Ambiente-Fotos vs. helle Produktfotos) sauber zusammen.
-- "circleIds": 1-2 IDs von Detail-/Akzentbildern, die als runde Kreis-Ausschnitte hervorgehoben werden.
+- "circleIds": 1-2 IDs von Detail-/Akzentbildern mit canCrop=true, die als runde Kreis-Ausschnitte hervorgehoben werden.
+- "crops": Objekt je Bild-ID: { "<id>": { "canCrop": true|false, "focusX": 0-100, "focusY": 0-100 } }. Setze "canCrop": false bei freigestellten Objekten/Möbeln/Figuren, bei denen nichts abgeschnitten werden darf; "canCrop": true bei Szenen/Texturen. "focusX"/"focusY" markiert in Prozent das Hauptmotiv (z. B. Gesicht/Figur statt nur Hintergrund oder Mützenspitze).
 - "bgColor": Eine sehr dezente, helle Hintergrundfarbe als Hex passend zum Thema (z. B. "#F6F2EA", "#F3F5F8", "#F4F6F2", "#FFFFFF").
 - "palette": Genau 5 harmonische Hex-Farben passend zu Projekt & Bildern (echte Akzent- und Materialfarben, nicht nur Grau).
 - "badgeText": Kurzer, stilvoller 1-3-Wort-Titel für das runde Badge (z. B. "${projectTitle}").
@@ -1955,6 +1972,7 @@ Antworte ausschließlich als JSON.`;
 
         pushCanvasUndo(folderId);
 
+        const cropsRes = (director && typeof director.crops === 'object' && director.crops) ? director.crops : {};
         const planMap = new Map(plan.items.map((p) => [p.id, p]));
         visualItems.forEach((it) => {
           const p = planMap.get(it.id);
@@ -1965,14 +1983,18 @@ Antworte ausschließlich als JSON.`;
             it.canvas.h = p.h;
             it.canvas.z = p.z;
             if (!keepFormatting) {
+              const cr = cropsRes[it.id] || {};
               it.canvas.shape = p.shape;
               it.canvas.frameColor = p.frameColor || '';
               it.canvas.frameWidth = p.frameWidth || 6;
               it.canvas.shadow = !!p.shadow;
+              if (cr.focusX !== undefined) it.canvas.cropX = Math.max(0, Math.min(100, Math.round(Number(cr.focusX) || 50)));
+              if (cr.focusY !== undefined) it.canvas.cropY = Math.max(0, Math.min(100, Math.round(Number(cr.focusY) || 50)));
               const imgAr = aspectWtoHMap.get(it.id) || 1;
               const tileAr = p.w / Math.max(1, p.h);
               const mismatch = Math.max(imgAr / tileAr, tileAr / imgAr);
-              it.canvas.fitMode = (p.shape !== 'circle' && mismatch > 1.55) ? 'contain' : 'cover';
+              const maxMismatch = cr.canCrop === false ? 1.18 : 1.55;
+              it.canvas.fitMode = (p.shape !== 'circle' && mismatch > maxMismatch) ? 'contain' : 'cover';
               delete it.canvas.frame;
             } else if (it.canvas.shape === 'circle') {
               const s = Math.min(it.canvas.w, it.canvas.h);
