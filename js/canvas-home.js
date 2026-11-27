@@ -1432,11 +1432,26 @@
             ctx.textAlign = align;
             ctx.textBaseline = 'middle';
             const padX = e.obj.shape === 'circle' ? Math.round(bw * 0.14) : 12;
+            const maxTextW = Math.max(40, bw - padX * 2);
             const tx = align === 'left' ? x + padX : (align === 'right' ? x + bw - padX : x + bw / 2);
-            const lines = String(e.obj.text || '').split('\n');
-            const lh = fs * 1.18;
-            const startY = y + bh / 2 - ((lines.length - 1) * lh) / 2;
-            lines.forEach((ln, li) => {
+            const wrappedLines = [];
+            for (const para of String(e.obj.text || '').split('\n')) {
+              if (!para.trim()) { wrappedLines.push(''); continue; }
+              let curLine = '';
+              for (const word of para.split(/\s+/)) {
+                const test = curLine ? `${curLine} ${word}` : word;
+                if (ctx.measureText(test).width <= maxTextW) {
+                  curLine = test;
+                } else {
+                  if (curLine) wrappedLines.push(curLine);
+                  curLine = word;
+                }
+              }
+              if (curLine) wrappedLines.push(curLine);
+            }
+            const lh = fs * 1.2;
+            const startY = y + bh / 2 - ((wrappedLines.length - 1) * lh) / 2;
+            wrappedLines.forEach((ln, li) => {
               if (e.obj.fontStyle === 'outline') {
                 ctx.strokeStyle = e.obj.color || '#A59858';
                 ctx.lineWidth = 1.5;
@@ -1466,12 +1481,17 @@
       }
 
       function buildEditorialGridPlan(visualItems, director, projectTitle, fallbackPalette, keepFormatting = false, opts = {}) {
-        const { heroId = '', layoutStyle = 'auto', projectLead = '', projectEyebrow = '' } = opts;
+        const { heroId = '', layoutStyle = 'auto', projectLead = '', projectEyebrow = '', aspectWtoHMap = new Map() } = opts;
         const gap = 14;
         const startX = 40;
         let curY = 40;
 
         const idMap = new Map(visualItems.map((it) => [it.id, it]));
+        const getImgAr = (id) => {
+          if (aspectWtoHMap.has(id)) return aspectWtoHMap.get(id);
+          const it = idMap.get(id);
+          return (it && it.canvas && it.canvas.w && it.canvas.h) ? (it.canvas.w / it.canvas.h) : 1;
+        };
         const orderedIds = Array.isArray(director.orderedIds)
           ? director.orderedIds.filter((id) => idMap.has(id))
           : [];
@@ -1839,45 +1859,67 @@
         const swatchHexes = (home.swatches || []).map((s) => s.hex).filter(Boolean);
         const fallbackPalette = Array.from(new Set([...swatchHexes, ...extracted, '#C59B6D', '#4A5D3B', '#5D8798', '#EAE6DF', '#262927'])).slice(0, 5);
 
+        const aspectWtoHMap = new Map();
+        visualItems.forEach((it) => {
+          const imgEl = stage.querySelector(`.canvas-item[data-canvas-id="${it.id}"] img`);
+          const ar = (imgEl && imgEl.naturalWidth > 0 && imgEl.naturalHeight > 0)
+            ? (imgEl.naturalWidth / imgEl.naturalHeight)
+            : ((it.canvas.w || 200) / Math.max(1, it.canvas.h || 200));
+          aspectWtoHMap.set(it.id, ar);
+        });
+
         let director = {};
         if (geminiKey) {
-          showSyncStatus('✨ KI kuratiert Reihenfolge, Farben & Highlights…', true);
+          showSyncStatus('✨ KI sichtet Bilder & kuratiert Layout…', true);
           try {
-            const itemInfos = visualItems.map((it) => {
+            const extraParts = [];
+            const itemInfos = visualItems.map((it, idx) => {
               const resolved = resolveBoardItem(it, folderId);
               const imgEl = stage.querySelector(`.canvas-item[data-canvas-id="${it.id}"] img`);
-              const ar = (imgEl && imgEl.naturalWidth > 0)
-                ? +(imgEl.naturalHeight / imgEl.naturalWidth).toFixed(2)
-                : +((it.canvas.h || 200) / Math.max(1, it.canvas.w || 200)).toFixed(2);
+              const arHtoW = +(1 / Math.max(0.2, aspectWtoHMap.get(it.id) || 1)).toFixed(2);
+              if (idx < 16 && imgEl && imgEl.complete && imgEl.naturalWidth > 0) {
+                try {
+                  const tc = document.createElement('canvas');
+                  const sc = Math.min(1, 180 / Math.max(imgEl.naturalWidth, imgEl.naturalHeight));
+                  tc.width = Math.max(1, Math.round(imgEl.naturalWidth * sc));
+                  tc.height = Math.max(1, Math.round(imgEl.naturalHeight * sc));
+                  tc.getContext('2d').drawImage(imgEl, 0, 0, tc.width, tc.height);
+                  const b64 = tc.toDataURL('image/jpeg', 0.65).split(',')[1];
+                  if (b64) {
+                    extraParts.push({ text: `Bild ${it.id}:` });
+                    extraParts.push({ inline_data: { mime_type: 'image/jpeg', data: b64 } });
+                  }
+                } catch (ce) {}
+              }
               return {
                 id: it.id,
                 title: resolved.title || 'Element',
                 tags: resolved.tags || [],
-                aspectRatioHtoW: ar,
+                aspectRatioHtoW: arHtoW,
                 colors: (resolved.ai && resolved.ai.colorNames) ? resolved.ai.colorNames : []
               };
             });
 
-            const prompt = `Du bist Creative Director für Editorial-Moodboards. Kuratiere die Reihenfolge und Highlights für ein Projekt-Moodboard (das exakte Raster berechnet danach unsere Layout-Engine, du gibst KEINE Pixelkoordinaten aus).
+            const prompt = `Du bist Creative Director für Editorial-Moodboards. Unten siehst du die Metadaten und verkleinerte Vorschaubilder. Kuratiere die Reihenfolge, Highlights und Stilwahl (das exakte Raster berechnet danach unsere Layout-Engine, du gibst KEINE Pixelkoordinaten aus).
 Projekt: ${JSON.stringify({ title: projectTitle, eyebrow: home.eyebrow || '', lead: home.lead || '', swatches: home.swatches || [], extractedColors: fallbackPalette })}
 Bilder: ${JSON.stringify(itemInfos)}
 Regeln:
 - "layoutStyle": Wähle passend zu Projekt, Bildern und Stil-Hinweis eine dieser 6 Vorlagen: "collage-wide" (quer mit vertikaler Palette links & überlappenden Kreisen), "brand-header" (quer mit Header-Zeile oben & dichtem Raster), "vision-board" (quer mit vertikaler Swatch-Spalte links & farbigem Textblock), "minimalist-tall" (hochkant mit hoher rechter Spalte), "hero-left", "hero-right".${styleHint ? ` Nutzerwunsch / Stil-Hinweis: "${styleHint}".` : ''}
-- "orderedIds": Alle Bild-IDs in harmonischer Reihenfolge. Das ERSTE Bild ist das große Hero-Bild (wähle bevorzugt ein stimmungsvolles Querformat-/Szene-Bild mit aspectRatioHtoW <= 1.05, KEIN schmales freigestelltes Einzelobjekt).${heroId ? ` WICHTIG: Das Bild "${heroId}" ist fest als Hero-Bild gewählt und MUSS an erster Stelle stehen.` : ''}
-- "circleIds": 1-2 IDs von Detail-/Akzentbildern (z. B. kleines Deko-Objekt), die als runde Kreis-Ausschnitte hervorgehoben werden.
+- "orderedIds": Alle Bild-IDs in harmonischer Reihenfolge. Das ERSTE Bild ist das große Hero-Bild (wähle anhand der Vorschaubilder ein stimmungsvolles Szene-/Ambiente-Foto, KEIN weißes freigestelltes Einzelobjekt).${heroId ? ` WICHTIG: Das Bild "${heroId}" ist fest als Hero-Bild gewählt und MUSS an erster Stelle stehen.` : ''} Gruppiere ähnliche Stimmungen/Farbwerte (z. B. dunkle Ambiente-Fotos vs. helle Produktfotos) sauber zusammen.
+- "circleIds": 1-2 IDs von Detail-/Akzentbildern, die als runde Kreis-Ausschnitte hervorgehoben werden.
 - "bgColor": Eine sehr dezente, helle Hintergrundfarbe als Hex passend zum Thema (z. B. "#F6F2EA", "#F3F5F8", "#F4F6F2", "#FFFFFF").
 - "palette": Genau 5 harmonische Hex-Farben passend zu Projekt & Bildern (echte Akzent- und Materialfarben, nicht nur Grau).
 - "badgeText": Kurzer, stilvoller 1-3-Wort-Titel für das runde Badge (z. B. "${projectTitle}").
 - "badgeBg": Dunkler oder warmer Akzent-Hex für das runde Badge (z. B. "#262927", "#2F5241", "#5D4E3E").
 Antworte ausschließlich als JSON.`;
-            director = await requestGeminiJson(prompt, geminiKey, 1500, 0.35);
+            director = await requestGeminiJson(prompt, geminiKey, 1500, 0.35, extraParts);
           } catch (err) {
             console.warn('KI-Layout Fallback aktiv:', err);
           }
           showSyncStatus('', false);
         }
 
-        const plan = buildEditorialGridPlan(visualItems, { ...(director || {}), prioritySwatches: swatchHexes }, projectTitle, fallbackPalette, keepFormatting, { heroId, layoutStyle, projectLead: home.lead || '', projectEyebrow: home.eyebrow || '' });
+        const plan = buildEditorialGridPlan(visualItems, { ...(director || {}), prioritySwatches: swatchHexes }, projectTitle, fallbackPalette, keepFormatting, { heroId, layoutStyle, projectLead: home.lead || '', projectEyebrow: home.eyebrow || '', aspectWtoHMap });
 
         pushCanvasUndo(folderId);
 
@@ -1895,7 +1937,10 @@ Antworte ausschließlich als JSON.`;
               it.canvas.frameColor = p.frameColor || '';
               it.canvas.frameWidth = p.frameWidth || 6;
               it.canvas.shadow = !!p.shadow;
-              it.canvas.fitMode = 'cover';
+              const imgAr = aspectWtoHMap.get(it.id) || 1;
+              const tileAr = p.w / Math.max(1, p.h);
+              const mismatch = Math.max(imgAr / tileAr, tileAr / imgAr);
+              it.canvas.fitMode = (p.shape !== 'circle' && mismatch > 1.38) ? 'contain' : 'cover';
               delete it.canvas.frame;
             } else if (it.canvas.shape === 'circle') {
               const s = Math.min(it.canvas.w, it.canvas.h);

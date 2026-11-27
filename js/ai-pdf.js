@@ -223,11 +223,11 @@
         throw new Error('Gemini API vorübergehend überlastet (429/503).');
       }
 
-      async function requestGeminiJson(promptText, apiKey, maxTokens = 2048, temperature = 0.4) {
+      async function requestGeminiJson(promptText, apiKey, maxTokens = 2048, temperature = 0.4, extraParts = []) {
         const modelName = await resolveGeminiModel(apiKey);
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(apiKey)}`;
         const body = {
-          contents: [{ parts: [{ text: promptText }] }],
+          contents: [{ parts: [{ text: promptText }, ...(Array.isArray(extraParts) ? extraParts : [])] }],
           generationConfig: {
             responseMimeType: 'application/json',
             maxOutputTokens: maxTokens,
