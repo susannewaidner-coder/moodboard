@@ -170,6 +170,77 @@
         return `<div style="width:100%; text-align:${align};">${headHtml}${bodyHtml}</div>`;
       }
 
+      function layoutItemsToBoard(items, boardW, boardH) {
+        if (!Array.isArray(items) || items.length === 0) return;
+        const hasFixed = boardW > 0 && boardH > 0;
+        if (!hasFixed) {
+          const gap = 24;
+          const cols = 4;
+          let curX = 32;
+          let curY = 32;
+          let rowMaxH = 0;
+          items.forEach((it, idx) => {
+            if (!it.canvas) it.canvas = { w: 220, h: 210, z: idx + 1 };
+            if (idx > 0 && idx % cols === 0) {
+              curX = 32;
+              curY += rowMaxH + gap;
+              rowMaxH = 0;
+            }
+            it.canvas.x = curX;
+            it.canvas.y = curY;
+            curX += (it.canvas.w || 220) + gap;
+            rowMaxH = Math.max(rowMaxH, it.canvas.h || 210);
+          });
+          return;
+        }
+
+        const n = items.length;
+        const pad = Math.max(12, Math.round(Math.min(boardW, boardH) * 0.035));
+        const gap = Math.max(10, Math.round(Math.min(boardW, boardH) * 0.02));
+        const availW = Math.max(120, boardW - pad * 2);
+        const availH = Math.max(120, boardH - pad * 2);
+
+        let bestCols = 1;
+        let bestScore = -1;
+        for (let c = 1; c <= n; c++) {
+          const r = Math.ceil(n / c);
+          const cw = (availW - gap * (c - 1)) / c;
+          const ch = (availH - gap * (r - 1)) / r;
+          if (cw <= 0 || ch <= 0) continue;
+          const score = Math.min(cw, ch);
+          if (score > bestScore) {
+            bestScore = score;
+            bestCols = c;
+          }
+        }
+
+        const rows = Math.ceil(n / bestCols);
+        const cellW = Math.max(36, (availW - gap * (bestCols - 1)) / bestCols);
+        const cellH = Math.max(36, (availH - gap * (rows - 1)) / rows);
+
+        items.forEach((it, idx) => {
+          if (!it.canvas) it.canvas = { w: 220, h: 210, z: idx + 1 };
+          const col = idx % bestCols;
+          const row = Math.floor(idx / bestCols);
+          const curW = Number(it.canvas.w) || 220;
+          const curH = Number(it.canvas.h) || 210;
+          const ratio = it.canvas.shape === 'circle' ? 1 : (curW / Math.max(1, curH));
+          let w = cellW;
+          let h = w / ratio;
+          if (h > cellH) {
+            h = cellH;
+            w = h * ratio;
+          }
+          w = Math.max(36, Math.round(w));
+          h = Math.max(36, Math.round(h));
+          it.canvas.w = w;
+          it.canvas.h = h;
+          it.canvas.x = Math.round(pad + col * (cellW + gap) + (cellW - w) / 2);
+          it.canvas.y = Math.round(pad + row * (cellH + gap) + (cellH - h) / 2);
+          if (!it.canvas.z) it.canvas.z = idx + 1;
+        });
+      }
+
       function renderCanvasView(container, statsEl, folderId) {
         const oldVp = document.getElementById('canvasViewport');
         const savedVpScroll = oldVp ? { left: oldVp.scrollLeft, top: oldVp.scrollTop } : null;
@@ -184,14 +255,20 @@
 
         // Initiale Positionen vergeben, falls noch keine Canvas-Koordinaten existieren
         let changed = false;
+        let newlyPlaced = 0;
         visualItems.forEach((item, idx) => {
           if (!item.canvas) {
             const col = idx % 4;
             const row = Math.floor(idx / 4);
             item.canvas = { x: 40 + col * 250, y: 40 + row * 240, w: 220, h: 210, z: idx + 1, _needsAutoAspect: true };
             changed = true;
+            newlyPlaced++;
           }
         });
+        const initCs = content.board.canvasSettings || {};
+        if (newlyPlaced > 0 && newlyPlaced === visualItems.length && Number(initCs.boardWidth) > 0 && Number(initCs.boardHeight) > 0) {
+          layoutItemsToBoard(visualItems, Number(initCs.boardWidth), Number(initCs.boardHeight));
+        }
         if (changed) scheduleBoardSave(folderId);
         const undoCount = getCanvasUndoStack(folderId).length;
 
@@ -730,6 +807,7 @@
           document.getElementById('canvasResetViewBtn').textContent = '100 %';
         });
         document.getElementById('canvasAutoLayoutBtn').addEventListener('click', () => {
+          pushCanvasUndo(folderId);
           // Reihenfolge anhand aktueller visueller Position (Zeilenbänder auf Y, dann X) beibehalten
           const ordered = visualItems.slice().sort((a, b) => {
             const ay = Math.round((a.canvas.y || 0) / 110);
@@ -737,22 +815,7 @@
             if (ay !== by) return ay - by;
             return (a.canvas.x || 0) - (b.canvas.x || 0);
           });
-          const gap = 24;
-          const cols = 4;
-          let curX = 32;
-          let curY = 32;
-          let rowMaxH = 0;
-          ordered.forEach((it, idx) => {
-            if (idx > 0 && idx % cols === 0) {
-              curX = 32;
-              curY += rowMaxH + gap;
-              rowMaxH = 0;
-            }
-            it.canvas.x = curX;
-            it.canvas.y = curY;
-            curX += (it.canvas.w || 220) + gap;
-            rowMaxH = Math.max(rowMaxH, it.canvas.h || 210);
-          });
+          layoutItemsToBoard(ordered, boardW, boardH);
           scheduleBoardSave(folderId);
           renderCanvasView(container, statsEl, folderId);
         });
@@ -818,7 +881,13 @@
         function restoreAllHiddenToCanvas() {
           if (hiddenItems.length === 0) return;
           pushCanvasUndo(folderId);
-          allItems.forEach((it) => { it.canvasHidden = false; });
+          allItems.forEach((it, idx) => {
+            it.canvasHidden = false;
+            if (!it.canvas) it.canvas = { x: 40, y: 40, w: 220, h: 210, z: idx + 1, _needsAutoAspect: true };
+          });
+          if (hasFixedBoard) {
+            layoutItemsToBoard(allItems.filter((it) => !it.canvasHidden), boardW, boardH);
+          }
           scheduleBoardSave(folderId);
           renderCanvasView(container, statsEl, folderId);
         }
