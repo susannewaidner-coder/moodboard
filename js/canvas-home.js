@@ -1505,7 +1505,8 @@
           : (validStyles.includes(director.layoutStyle) ? director.layoutStyle : validStyles[Math.floor(Math.random() * validStyles.length)]);
 
         const isWide = ['collage-wide', 'brand-header', 'vision-board'].includes(chosenStyle);
-        const boardW = isWide ? 1080 : 840;
+        const isPanorama = ['collage-wide', 'brand-header'].includes(chosenStyle);
+        const boardW = isPanorama ? 1440 : (isWide ? 1140 : 840);
 
         let circleSet;
         if (keepFormatting) {
@@ -1558,9 +1559,9 @@
           curY += rowH + gap;
         }
 
-        function layoutRemainingRows(remIds, perRowMax = isWide ? 5 : 3) {
-          const targetMinH = isWide ? 185 : 175;
-          const targetMaxH = isWide ? 310 : 290;
+        function layoutRemainingRows(remIds, perRowMax = isPanorama ? 6 : (isWide ? 4 : 3)) {
+          const targetMinH = isPanorama ? 155 : (isWide ? 180 : 175);
+          const targetMaxH = isPanorama ? 245 : (isWide ? 290 : 290);
           let rIdx = 0;
           while (rIdx < remIds.length) {
             const remaining = remIds.length - rIdx;
@@ -1590,9 +1591,9 @@
         }
 
         if (chosenStyle === 'collage-wide') {
-          // Beispiel 1: Senkrechte Palette oben links + dichte Collage daneben/darunter + überlappende Kreise
-          const palW = 260;
-          const topH = 200;
+          // Beispiel 1: Senkrechte Palette oben links + dichte Panorama-Collage daneben/darunter + überlappende Kreise
+          const palW = 300;
+          const topH = 210;
           elements.push({
             id: uid('cel'),
             type: 'palette',
@@ -1605,13 +1606,13 @@
             shape: 'rect',
             orientation: 'vertical'
           });
-          const topCount = Math.min(2, gridIds.length);
+          const topCount = Math.min(3, gridIds.length);
           if (topCount > 0) {
             layoutRow(gridIds.slice(0, topCount), topH, startX + palW + gap, boardW - palW - gap);
           } else {
             curY += topH + gap;
           }
-          layoutRemainingRows(gridIds.slice(topCount), 4);
+          layoutRemainingRows(gridIds.slice(topCount), 6);
           const circleList = Array.from(circleSet);
           if (circleList[0]) {
             itemsLayout.push({ id: circleList[0], x: startX + Math.round(boardW * 0.62), y: 120, w: 185, h: 185, z: 24, shape: 'circle', frameColor: '#FFFFFF', frameWidth: 6, shadow: true });
@@ -1623,18 +1624,18 @@
         }
 
         if (chosenStyle === 'brand-header') {
-          // Beispiel 3: Header-Leiste (Titel + runde Mini-Swatches + Leitidee) über dichtem Kachelraster
-          const headerH = 92;
+          // Beispiel 3: Panorama Brand-Header (Titel + runde Mini-Swatches + Leitidee) über dichtem 5-6er Panorama-Raster
+          const headerH = 88;
           elements.push({
             id: uid('cel'),
             type: 'text',
             x: startX,
             y: curY,
-            w: 220,
+            w: 250,
             h: headerH,
             z: 20,
             text: director.badgeText || projectTitle || 'Moodboard',
-            fontSize: 28,
+            fontSize: 30,
             fontStyle: 'serif',
             textAlign: 'left',
             color: '#262927',
@@ -1645,9 +1646,9 @@
           elements.push({
             id: uid('cel'),
             type: 'palette',
-            x: startX + 235,
-            y: curY + 28,
-            w: 230,
+            x: startX + 265,
+            y: curY + 26,
+            w: 240,
             h: 36,
             z: 20,
             colors: palColors.slice(0, 5),
@@ -1657,13 +1658,13 @@
           elements.push({
             id: uid('cel'),
             type: 'text',
-            x: startX + 485,
+            x: startX + 525,
             y: curY,
-            w: boardW - 485,
+            w: boardW - 525,
             h: headerH,
             z: 20,
             text: projectLead || projectEyebrow || 'Stimmung, Farben & Materialien für dieses Projekt.',
-            fontSize: 14,
+            fontSize: 15,
             fontStyle: 'sans',
             textAlign: 'left',
             color: '#4E5350',
@@ -1672,7 +1673,7 @@
             frame: false
           });
           curY += headerH + gap + 4;
-          layoutRemainingRows(gridIds, 4);
+          layoutRemainingRows(gridIds, 6);
           return { bgColor: director.bgColor || '#FFFFFF', collageMode: true, items: itemsLayout, elements };
         }
 
