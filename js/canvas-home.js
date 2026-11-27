@@ -968,8 +968,9 @@
             const keepElements = document.getElementById('aiLayoutKeepElementsCb').checked;
             const heroId = document.getElementById('aiLayoutHeroSelect')?.value || '';
             const layoutStyle = document.getElementById('aiLayoutStyleSelect')?.value || 'auto';
+            const styleHint = document.getElementById('aiLayoutHintInput')?.value.trim() || '';
             closeModal('aiLayoutModal');
-            await generateAiMoodboardLayout(folderId, visualItems, content, stage, container, statsEl, { keepFormatting, keepElements, heroId, layoutStyle });
+            await generateAiMoodboardLayout(folderId, visualItems, content, stage, container, statsEl, { keepFormatting, keepElements, heroId, layoutStyle, styleHint });
           };
           openModal('aiLayoutModal');
         });
@@ -1465,9 +1466,8 @@
       }
 
       function buildEditorialGridPlan(visualItems, director, projectTitle, fallbackPalette, keepFormatting = false, opts = {}) {
-        const { heroId = '', layoutStyle = 'auto' } = opts;
+        const { heroId = '', layoutStyle = 'auto', projectLead = '', projectEyebrow = '' } = opts;
         const gap = 14;
-        const boardW = 840;
         const startX = 40;
         let curY = 40;
 
@@ -1479,12 +1479,22 @@
           if (!orderedIds.includes(it.id)) orderedIds.push(it.id);
         }
 
+        const validStyles = ['collage-wide', 'brand-header', 'vision-board', 'minimalist-tall', 'hero-left', 'hero-right'];
+        const chosenStyle = layoutStyle !== 'auto' && validStyles.includes(layoutStyle)
+          ? layoutStyle
+          : (validStyles.includes(director.layoutStyle) ? director.layoutStyle : validStyles[Math.floor(Math.random() * validStyles.length)]);
+
+        const isWide = ['collage-wide', 'brand-header', 'vision-board'].includes(chosenStyle);
+        const boardW = isWide ? 1080 : 840;
+
         let circleSet;
         if (keepFormatting) {
           circleSet = new Set(orderedIds.filter((id) => {
             const it = idMap.get(id);
             return it && it.canvas && it.canvas.shape === 'circle';
           }));
+        } else if (['brand-header', 'vision-board'].includes(chosenStyle)) {
+          circleSet = new Set();
         } else {
           circleSet = new Set(Array.isArray(director.circleIds) ? director.circleIds.filter((id) => idMap.has(id) && id !== heroId).slice(0, 2) : []);
           if (circleSet.size === 0 && orderedIds.length >= 6) {
@@ -1499,34 +1509,196 @@
           gridIds = [heroId, ...gridIds.filter((id) => id !== heroId)];
         }
 
-        const validStyles = ['hero-left', 'hero-right', 'minimalist-tall', 'gallery-grid'];
-        const chosenStyle = layoutStyle !== 'auto' && validStyles.includes(layoutStyle)
-          ? layoutStyle
-          : (validStyles.includes(director.layoutStyle) ? director.layoutStyle : validStyles[Math.floor(Math.random() * validStyles.length)]);
+        const swatchHexes = Array.isArray(director.prioritySwatches) ? director.prioritySwatches : [];
+        const rawPal = [
+          ...swatchHexes,
+          ...(Array.isArray(director.palette) ? director.palette : []),
+          ...fallbackPalette
+        ].map((h) => String(h || '').toUpperCase()).filter((h) => /^#[0-9A-F]{6}$/.test(h));
+        const palColors = Array.from(new Set(rawPal)).slice(0, Math.max(5, Math.min(7, swatchHexes.length || 5)));
 
         const itemsLayout = [];
+        const elements = [];
         let zCounter = 1;
 
-        function layoutRow(rowIds, rowH) {
+        function layoutRow(rowIds, rowH, rowX = startX, rowW = boardW) {
           if (rowIds.length === 0) return;
           const totalGap = gap * (rowIds.length - 1);
-          const availW = boardW - totalGap;
+          const availW = rowW - totalGap;
           const aspects = rowIds.map((id) => {
             const it = idMap.get(id);
             const ar = (it.canvas && it.canvas.w && it.canvas.h) ? (it.canvas.w / it.canvas.h) : 1;
             return Math.max(0.55, Math.min(1.85, ar));
           });
           const sumAr = aspects.reduce((s, a) => s + a, 0);
-          let curX = startX;
+          let curX = rowX;
           rowIds.forEach((id, idx) => {
             const isLast = idx === rowIds.length - 1;
-            const w = isLast ? (startX + boardW - curX) : Math.round((aspects[idx] / sumAr) * availW);
+            const w = isLast ? (rowX + rowW - curX) : Math.round((aspects[idx] / sumAr) * availW);
             itemsLayout.push({ id, x: curX, y: curY, w, h: rowH, z: zCounter++, shape: 'rect', frameColor: '', shadow: false });
             curX += w + gap;
           });
           curY += rowH + gap;
         }
 
+        function layoutRemainingRows(remIds, perRowMax = isWide ? 4 : 3) {
+          let rIdx = 0;
+          while (rIdx < remIds.length) {
+            const remaining = remIds.length - rIdx;
+            const count = remaining === 4 && perRowMax === 3 ? 2 : Math.min(perRowMax, remaining);
+            const rowIds = remIds.slice(rIdx, rIdx + count);
+            const rowH = count === 1 ? 260 : (count === 2 ? 250 : (count === 3 ? 220 : 195));
+            layoutRow(rowIds, rowH);
+            rIdx += count;
+          }
+        }
+
+        if (chosenStyle === 'collage-wide') {
+          // Beispiel 1: Senkrechte Palette oben links + dichte Collage daneben/darunter + überlappende Kreise
+          const palW = 260;
+          const topH = 200;
+          elements.push({
+            id: uid('cel'),
+            type: 'palette',
+            x: startX,
+            y: curY,
+            w: palW,
+            h: topH,
+            z: 18,
+            colors: palColors.slice(0, 5),
+            shape: 'rect',
+            orientation: 'vertical'
+          });
+          const topCount = Math.min(2, gridIds.length);
+          if (topCount > 0) {
+            layoutRow(gridIds.slice(0, topCount), topH, startX + palW + gap, boardW - palW - gap);
+          } else {
+            curY += topH + gap;
+          }
+          layoutRemainingRows(gridIds.slice(topCount), 4);
+          const circleList = Array.from(circleSet);
+          if (circleList[0]) {
+            itemsLayout.push({ id: circleList[0], x: startX + Math.round(boardW * 0.62), y: 120, w: 185, h: 185, z: 24, shape: 'circle', frameColor: '#FFFFFF', frameWidth: 6, shadow: true });
+          }
+          if (circleList[1]) {
+            itemsLayout.push({ id: circleList[1], x: startX + Math.round(boardW * 0.24), y: Math.max(180, curY - 220), w: 175, h: 175, z: 25, shape: 'circle', frameColor: '#FFFFFF', frameWidth: 6, shadow: true });
+          }
+          return { bgColor: director.bgColor || '#FFFFFF', collageMode: true, items: itemsLayout, elements };
+        }
+
+        if (chosenStyle === 'brand-header') {
+          // Beispiel 3: Header-Leiste (Titel + runde Mini-Swatches + Leitidee) über dichtem Kachelraster
+          const headerH = 92;
+          elements.push({
+            id: uid('cel'),
+            type: 'text',
+            x: startX,
+            y: curY,
+            w: 220,
+            h: headerH,
+            z: 20,
+            text: director.badgeText || projectTitle || 'Moodboard',
+            fontSize: 28,
+            fontStyle: 'serif',
+            textAlign: 'left',
+            color: '#262927',
+            bgColor: '#FFFFFF',
+            shape: 'none',
+            frame: false
+          });
+          elements.push({
+            id: uid('cel'),
+            type: 'palette',
+            x: startX + 235,
+            y: curY + 28,
+            w: 230,
+            h: 36,
+            z: 20,
+            colors: palColors.slice(0, 5),
+            shape: 'circle',
+            orientation: 'horizontal'
+          });
+          elements.push({
+            id: uid('cel'),
+            type: 'text',
+            x: startX + 485,
+            y: curY,
+            w: boardW - 485,
+            h: headerH,
+            z: 20,
+            text: projectLead || projectEyebrow || 'Stimmung, Farben & Materialien für dieses Projekt.',
+            fontSize: 14,
+            fontStyle: 'sans',
+            textAlign: 'left',
+            color: '#4E5350',
+            bgColor: '#FFFFFF',
+            shape: 'none',
+            frame: false
+          });
+          curY += headerH + gap + 4;
+          layoutRemainingRows(gridIds, 4);
+          return { bgColor: director.bgColor || '#FFFFFF', collageMode: true, items: itemsLayout, elements };
+        }
+
+        if (chosenStyle === 'vision-board') {
+          // Beispiel 4: Senkrechte Swatch-Spalte links + Hero-Stapel + Mittel-Spalte + farbiger Textblock rechts unten
+          const swW = 105;
+          const totalH = 520;
+          elements.push({
+            id: uid('cel'),
+            type: 'palette',
+            x: startX,
+            y: curY,
+            w: swW,
+            h: totalH,
+            z: 18,
+            colors: palColors.slice(0, 6),
+            shape: 'rect',
+            orientation: 'vertical'
+          });
+          const bodyX = startX + swW + gap;
+          const bodyW = boardW - swW - gap;
+          const c1W = Math.round(bodyW * 0.32);
+          const c2W = Math.round(bodyW * 0.22);
+          const c3W = bodyW - c1W - c2W - gap * 2;
+          const h1 = 275;
+          const h2 = totalH - h1 - gap;
+          if (gridIds[0]) itemsLayout.push({ id: gridIds[0], x: bodyX, y: curY, w: c1W, h: h1, z: zCounter++, shape: 'rect', frameColor: '', shadow: false });
+          if (gridIds[1]) itemsLayout.push({ id: gridIds[1], x: bodyX, y: curY + h1 + gap, w: c1W, h: h2, z: zCounter++, shape: 'rect', frameColor: '', shadow: false });
+          if (gridIds[2]) itemsLayout.push({ id: gridIds[2], x: bodyX + c1W + gap, y: curY, w: c2W, h: totalH, z: zCounter++, shape: 'rect', frameColor: '', shadow: false });
+
+          const c3X = bodyX + c1W + gap + c2W + gap;
+          const top3H = 210;
+          const half3W = Math.round((c3W - gap) / 2);
+          if (gridIds[3]) itemsLayout.push({ id: gridIds[3], x: c3X, y: curY, w: half3W, h: top3H, z: zCounter++, shape: 'rect', frameColor: '', shadow: false });
+          if (gridIds[4]) itemsLayout.push({ id: gridIds[4], x: c3X + half3W + gap, y: curY, w: c3W - half3W - gap, h: top3H, z: zCounter++, shape: 'rect', frameColor: '', shadow: false });
+
+          const accentBg = (director.badgeBg && /^#[0-9a-fA-F]{6}$/.test(director.badgeBg)) ? director.badgeBg : (palColors[2] || '#4F6D5A');
+          const boxTitle = (director.badgeText || projectTitle || 'VISION BOARD').toUpperCase();
+          const boxBody = projectLead || projectEyebrow || 'Leitidee & Materialien';
+          elements.push({
+            id: uid('cel'),
+            type: 'text',
+            x: c3X,
+            y: curY + top3H + gap,
+            w: c3W,
+            h: totalH - top3H - gap,
+            z: 22,
+            text: `${boxTitle}\n\n${boxBody}`,
+            fontSize: 17,
+            fontStyle: 'serif',
+            textAlign: 'left',
+            color: '#FFFFFF',
+            bgColor: accentBg,
+            shape: 'pill',
+            frame: false
+          });
+          curY += totalH + gap;
+          layoutRemainingRows(gridIds.slice(5), 4);
+          return { bgColor: director.bgColor || '#FFFFFF', collageMode: true, items: itemsLayout, elements };
+        }
+
+        // Bestehende Hochkant-/Editorial-Stile (minimalist-tall, hero-left, hero-right)
         let cursor = 0;
         let heroSplitX = startX + Math.round(boardW * 0.58);
         if (chosenStyle === 'minimalist-tall' && gridIds.length >= 4) {
@@ -1543,10 +1715,6 @@
           curY += tallH + gap;
           cursor = 4;
           heroSplitX = startX + halfLeftW;
-        } else if (chosenStyle === 'gallery-grid' && gridIds.length >= 2) {
-          layoutRow(gridIds.slice(0, 2), 270);
-          cursor = 2;
-          heroSplitX = startX + Math.round(boardW * 0.5);
         } else if (chosenStyle === 'hero-right' && gridIds.length >= 3) {
           const rightW = Math.round(boardW * 0.58) - Math.round(gap / 2);
           const leftW = boardW - rightW - gap;
@@ -1572,113 +1740,50 @@
         }
 
         const paletteY = curY;
-        const swatchHexes = Array.isArray(director.prioritySwatches) ? director.prioritySwatches : [];
-        const rawPal = [
-          ...swatchHexes,
-          ...(Array.isArray(director.palette) ? director.palette : []),
-          ...fallbackPalette
-        ].map((h) => String(h || '').toUpperCase()).filter((h) => /^#[0-9A-F]{6}$/.test(h));
-        const palColors = Array.from(new Set(rawPal)).slice(0, Math.max(5, Math.min(6, swatchHexes.length || 5)));
-        const elements = [
-          {
-            id: uid('cel'),
-            type: 'palette',
-            x: startX,
-            y: paletteY,
-            w: boardW,
-            h: 54,
-            z: 18,
-            colors: palColors,
-            shape: 'rect',
-            orientation: 'horizontal'
-          }
-        ];
+        elements.push({
+          id: uid('cel'),
+          type: 'palette',
+          x: startX,
+          y: paletteY,
+          w: boardW,
+          h: 54,
+          z: 18,
+          colors: palColors.slice(0, 5),
+          shape: 'rect',
+          orientation: 'horizontal'
+        });
         curY += 54 + gap;
 
-        if (chosenStyle === 'gallery-grid') {
-          elements.push({
-            id: uid('cel'),
-            type: 'text',
-            x: startX,
-            y: curY,
-            w: boardW,
-            h: 56,
-            z: 20,
-            text: (director.badgeText || projectTitle || 'MOODBOARD').toUpperCase(),
-            fontSize: 34,
-            fontStyle: 'outline',
-            textAlign: 'center',
-            color: palColors[0] || '#8C7A5B',
-            bgColor: '#262927',
-            shape: 'none',
-            frame: false
-          });
-          curY += 56 + gap;
-        }
-
-        const rest = gridIds.slice(cursor);
-        let rIdx = 0;
-        while (rIdx < rest.length) {
-          const remaining = rest.length - rIdx;
-          const count = remaining === 4 ? 2 : Math.min(3, remaining);
-          const rowIds = rest.slice(rIdx, rIdx + count);
-          const rowH = count === 1 ? 260 : (count === 2 ? 250 : 215);
-          layoutRow(rowIds, rowH);
-          rIdx += count;
-        }
+        layoutRemainingRows(gridIds.slice(cursor), 3);
 
         const circleList = Array.from(circleSet);
         if (circleList[0]) {
-          itemsLayout.push({
-            id: circleList[0],
-            x: heroSplitX - 85,
-            y: Math.max(40, paletteY - 125),
-            w: 170,
-            h: 170,
-            z: 24,
-            shape: 'circle',
-            frameColor: '#FFFFFF',
-            frameWidth: 6,
-            shadow: true
-          });
+          itemsLayout.push({ id: circleList[0], x: heroSplitX - 85, y: Math.max(40, paletteY - 125), w: 170, h: 170, z: 24, shape: 'circle', frameColor: '#FFFFFF', frameWidth: 6, shadow: true });
         }
         if (circleList[1] && curY > paletteY + 200) {
-          itemsLayout.push({
-            id: circleList[1],
-            x: startX + Math.round(boardW * 0.33) - 80,
-            y: paletteY + 145,
-            w: 160,
-            h: 160,
-            z: 25,
-            shape: 'circle',
-            frameColor: '#FFFFFF',
-            frameWidth: 6,
-            shadow: true
-          });
+          itemsLayout.push({ id: circleList[1], x: startX + Math.round(boardW * 0.33) - 80, y: paletteY + 145, w: 160, h: 160, z: 25, shape: 'circle', frameColor: '#FFFFFF', frameWidth: 6, shadow: true });
         }
 
-        if (chosenStyle !== 'gallery-grid') {
-          const badgeX = chosenStyle === 'hero-right' ? (startX + boardW - 180) : (chosenStyle === 'minimalist-tall' ? (heroSplitX - 78) : (startX + 24));
-          const badgeY = chosenStyle === 'minimalist-tall' ? 160 : (paletteY - 115);
-          elements.push({
-            id: uid('cel'),
-            type: 'text',
-            x: badgeX,
-            y: Math.max(40, badgeY),
-            w: 155,
-            h: 155,
-            z: 26,
-            text: director.badgeText || projectTitle || 'Moodboard',
-            fontSize: 18,
-            fontStyle: 'sans',
-            textAlign: 'center',
-            color: '#FFFFFF',
-            bgColor: director.badgeBg || '#262927',
-            shape: 'circle',
-            frame: true,
-            frameColor: '#FFFFFF'
-          });
-        }
+        const badgeX = chosenStyle === 'hero-right' ? (startX + boardW - 180) : (chosenStyle === 'minimalist-tall' ? (heroSplitX - 78) : (startX + 24));
+        const badgeY = chosenStyle === 'minimalist-tall' ? 160 : (paletteY - 115);
+        elements.push({
+          id: uid('cel'),
+          type: 'text',
+          x: badgeX,
+          y: Math.max(40, badgeY),
+          w: 155,
+          h: 155,
+          z: 26,
+          text: director.badgeText || projectTitle || 'Moodboard',
+          fontSize: 18,
+          fontStyle: 'sans',
+          textAlign: 'center',
+          color: '#FFFFFF',
+          bgColor: director.badgeBg || '#262927',
+          shape: 'circle',
+          frame: true,
+          frameColor: '#FFFFFF'
+        });
 
         return {
           bgColor: director.bgColor || '#F6F4EF',
@@ -1689,7 +1794,7 @@
       }
 
       async function generateAiMoodboardLayout(folderId, visualItems, content, stage, container, statsEl, opts = {}) {
-        const { keepFormatting = false, keepElements = false, heroId = '', layoutStyle = 'auto' } = opts;
+        const { keepFormatting = false, keepElements = false, heroId = '', layoutStyle = 'auto', styleHint = '' } = opts;
         if (visualItems.length === 0) {
           await uiAlert('Bitte füge zuerst mindestens ein Bild oder Element zum Moodboard hinzu.');
           return;
@@ -1698,8 +1803,8 @@
         const folder = state.folders.find((f) => f.id === folderId);
         let home = content.board.projectHome || {};
 
-        // Falls wir in einem Unterordner sind: Swatches & Leitidee vom übergeordneten Hauptprojekt erben
-        if (!Array.isArray(home.swatches) || home.swatches.length === 0) {
+        // Falls wir in einem Unterordner sind: Swatches, Leitidee & Eyebrow vom übergeordneten Hauptprojekt erben
+        if (!Array.isArray(home.swatches) || home.swatches.length === 0 || !home.lead) {
           const ancestorIds = [];
           let cur = folder;
           const seen = new Set([folderId]);
@@ -1712,15 +1817,15 @@
             await ensureFoldersLoaded(ancestorIds);
             for (const aId of ancestorIds) {
               const aHome = state.folderContents[aId]?.board?.projectHome;
-              if (aHome && Array.isArray(aHome.swatches) && aHome.swatches.length > 0) {
+              if (aHome) {
                 home = {
                   ...aHome,
                   ...home,
-                  swatches: aHome.swatches,
+                  swatches: (Array.isArray(home.swatches) && home.swatches.length > 0) ? home.swatches : (aHome.swatches || []),
                   lead: home.lead || aHome.lead || '',
                   eyebrow: home.eyebrow || aHome.eyebrow || ''
                 };
-                break;
+                if (home.swatches.length > 0 && home.lead) break;
               }
             }
           }
@@ -1757,7 +1862,7 @@
 Projekt: ${JSON.stringify({ title: projectTitle, eyebrow: home.eyebrow || '', lead: home.lead || '', swatches: home.swatches || [], extractedColors: fallbackPalette })}
 Bilder: ${JSON.stringify(itemInfos)}
 Regeln:
-- "layoutStyle": Wähle passend zu den Bildformaten eine dieser 4 Vorlagen: "hero-left", "hero-right", "minimalist-tall", "gallery-grid".
+- "layoutStyle": Wähle passend zu Projekt, Bildern und Stil-Hinweis eine dieser 6 Vorlagen: "collage-wide" (quer mit vertikaler Palette links & überlappenden Kreisen), "brand-header" (quer mit Header-Zeile oben & dichtem Raster), "vision-board" (quer mit vertikaler Swatch-Spalte links & farbigem Textblock), "minimalist-tall" (hochkant mit hoher rechter Spalte), "hero-left", "hero-right".${styleHint ? ` Nutzerwunsch / Stil-Hinweis: "${styleHint}".` : ''}
 - "orderedIds": Alle Bild-IDs in harmonischer Reihenfolge. Das ERSTE Bild ist das große Hero-Bild (wähle bevorzugt ein stimmungsvolles Querformat-/Szene-Bild mit aspectRatioHtoW <= 1.05, KEIN schmales freigestelltes Einzelobjekt).${heroId ? ` WICHTIG: Das Bild "${heroId}" ist fest als Hero-Bild gewählt und MUSS an erster Stelle stehen.` : ''}
 - "circleIds": 1-2 IDs von Detail-/Akzentbildern (z. B. kleines Deko-Objekt), die als runde Kreis-Ausschnitte hervorgehoben werden.
 - "bgColor": Eine sehr dezente, helle Hintergrundfarbe als Hex passend zum Thema (z. B. "#F6F2EA", "#F3F5F8", "#F4F6F2", "#FFFFFF").
@@ -1772,7 +1877,7 @@ Antworte ausschließlich als JSON.`;
           showSyncStatus('', false);
         }
 
-        const plan = buildEditorialGridPlan(visualItems, { ...(director || {}), prioritySwatches: swatchHexes }, projectTitle, fallbackPalette, keepFormatting, { heroId, layoutStyle });
+        const plan = buildEditorialGridPlan(visualItems, { ...(director || {}), prioritySwatches: swatchHexes }, projectTitle, fallbackPalette, keepFormatting, { heroId, layoutStyle, projectLead: home.lead || '', projectEyebrow: home.eyebrow || '' });
 
         pushCanvasUndo(folderId);
 

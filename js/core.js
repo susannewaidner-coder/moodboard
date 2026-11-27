@@ -4,7 +4,7 @@
       /* ========================================================================
          1. KONFIGURATION & STATE
          ======================================================================== */
-      const APP_VERSION = 'v1.0.46';
+      const APP_VERSION = 'v1.0.47';
       const LS_KEYS = {
         clientId: 'mb_oauth_client_id',
         rootName: 'mb_root_folder_name',

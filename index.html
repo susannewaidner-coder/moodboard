@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>Moodboard &amp; Projekt-Planer — Google Drive</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <link rel="stylesheet" href="css/styles.css?v=1.0.46" />
+  <link rel="stylesheet" href="css/styles.css?v=1.0.47" />
 </head>
 </head>
 <body>
@@ -611,10 +611,12 @@
           <label class="form-label" for="aiLayoutStyleSelect">Layout-Stil</label>
           <select id="aiLayoutStyleSelect" class="form-control">
             <option value="auto">✨ KI wählt passend</option>
-            <option value="hero-left">Hero links (Editorial)</option>
-            <option value="hero-right">Hero rechts (Gespiegelt)</option>
-            <option value="minimalist-tall">Minimalist (Hochformat rechts)</option>
-            <option value="gallery-grid">Galerie (2+3 Raster)</option>
+            <option value="collage-wide">Collage Quer (Swatches links)</option>
+            <option value="brand-header">Brand-Board (Header oben)</option>
+            <option value="vision-board">Vision Board (Textblock &amp; Swatches)</option>
+            <option value="minimalist-tall">Minimalist (Hochkant)</option>
+            <option value="hero-left">Editorial Hero (links)</option>
+            <option value="hero-right">Editorial Hero (rechts)</option>
           </select>
         </div>
         <div class="form-group" style="margin-bottom:0;">
@@ -623,6 +625,10 @@
             <option value="">✨ KI wählt automatisch</option>
           </select>
         </div>
+      </div>
+      <div class="form-group" style="margin-bottom:12px;">
+        <label class="form-label" for="aiLayoutHintInput">Stil-Hinweis für die KI (optional)</label>
+        <input id="aiLayoutHintInput" class="form-control" type="text" placeholder="z. B. querformatig, ohne Kreise, ruhige Erdtöne..." />
       </div>
       <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:14px; font-size:0.85rem;">
         <label style="display:flex; align-items:flex-start; gap:8px; cursor:pointer;">
@@ -702,9 +708,9 @@
     </div>
   </div>
 
-  <script defer src="js/core.js?v=1.0.46"></script>
-  <script defer src="js/views.js?v=1.0.46"></script>
-  <script defer src="js/canvas-home.js?v=1.0.46"></script>
-  <script defer src="js/ai-pdf.js?v=1.0.46"></script>
+  <script defer src="js/core.js?v=1.0.47"></script>
+  <script defer src="js/views.js?v=1.0.47"></script>
+  <script defer src="js/canvas-home.js?v=1.0.47"></script>
+  <script defer src="js/ai-pdf.js?v=1.0.47"></script>
 </body>
 </html>
