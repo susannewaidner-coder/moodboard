@@ -95,6 +95,81 @@
         return true;
       }
 
+      function getShapeBorderRadiusCss(shape, angle = 0, radius = 14) {
+        if (shape === 'circle') return '50%';
+        if (shape === 'rounded' || shape === 'pill') return `${Math.max(0, Number(radius) || 14)}px`;
+        if (shape === 'semicircle') {
+          const a = ((Number(angle) || 0) % 360 + 360) % 360;
+          if (a === 90) return '0 999px 999px 0';
+          if (a === 180) return '0 0 999px 999px';
+          if (a === 270) return '999px 0 0 999px';
+          return '999px 999px 0 0';
+        }
+        if (shape === 'quartercircle') {
+          const a = ((Number(angle) || 0) % 360 + 360) % 360;
+          if (a === 90) return '0 100% 0 0';
+          if (a === 180) return '0 0 100% 0';
+          if (a === 270) return '0 0 0 100%';
+          return '100% 0 0 0';
+        }
+        return '';
+      }
+
+      function traceShapePathOnCtx(ctx, x, y, w, h, shape, angle = 0, radius = 14) {
+        ctx.beginPath();
+        if (shape === 'circle') {
+          ctx.arc(x + w / 2, y + h / 2, Math.min(w, h) / 2, 0, Math.PI * 2);
+          return;
+        }
+        if (shape === 'rounded' || shape === 'pill') {
+          ctx.roundRect(x, y, w, h, Math.max(0, Number(radius) || 14));
+          return;
+        }
+        if (shape === 'semicircle') {
+          const r = Math.max(w, h);
+          const a = ((Number(angle) || 0) % 360 + 360) % 360;
+          const radii = a === 90 ? [0, r, r, 0] : (a === 180 ? [0, 0, r, r] : (a === 270 ? [r, 0, 0, r] : [r, r, 0, 0]));
+          ctx.roundRect(x, y, w, h, radii);
+          return;
+        }
+        if (shape === 'quartercircle') {
+          const r = Math.max(w, h);
+          const a = ((Number(angle) || 0) % 360 + 360) % 360;
+          const radii = a === 90 ? [0, r, 0, 0] : (a === 180 ? [0, 0, r, 0] : (a === 270 ? [0, 0, 0, r] : [r, 0, 0, 0]));
+          ctx.roundRect(x, y, w, h, radii);
+          return;
+        }
+        ctx.rect(x, y, w, h);
+      }
+
+      function renderTextContentHtml(el) {
+        const align = el.textAlign || 'center';
+        const col = el.color || '#262927';
+        const fs = Number(el.fontSize) || 24;
+        const fam = el.fontStyle === 'serif' ? 'Georgia, serif' : 'inherit';
+        const bodyCss = el.fontStyle === 'outline'
+          ? `color:transparent; -webkit-text-stroke: 1.5px ${escapeHtml(col)}; font-weight:800;`
+          : `color:${escapeHtml(col)}; font-weight:500;`;
+        let headHtml = '';
+        if (el.heading) {
+          const hs = Number(el.headingSize) || Math.round(fs * 1.15);
+          const hStyle = el.headingStyle || 'serif';
+          const hFam = (hStyle === 'serif') ? 'Georgia, serif' : 'inherit';
+          const hText = hStyle === 'uppercase' ? el.heading.toUpperCase() : el.heading;
+          const hCss = hStyle === 'outline'
+            ? `color:transparent; -webkit-text-stroke: 1.5px ${escapeHtml(col)}; font-weight:800;`
+            : `color:${escapeHtml(col)}; font-weight:700; ${hStyle === 'uppercase' ? 'letter-spacing:0.08em;' : ''}`;
+          headHtml = `<div style="font-size:${hs}px; font-family:${hFam}; ${hCss} margin-bottom:${el.headingDivider ? 6 : 4}px;">${escapeHtml(hText)}</div>`;
+          if (el.headingDivider) {
+            headHtml += `<div style="height:1px; width:100%; background:${escapeHtml(col)}; opacity:0.55; margin-bottom:6px;"></div>`;
+          }
+        }
+        const bodyHtml = el.text
+          ? `<div style="font-size:${fs}px; font-family:${fam}; ${bodyCss}">${escapeHtml(el.text).replace(/\n/g, '<br>')}</div>`
+          : '';
+        return `<div style="width:100%; text-align:${align};">${headHtml}${bodyHtml}</div>`;
+      }
+
       function renderCanvasView(container, statsEl, folderId) {
         const oldVp = document.getElementById('canvasViewport');
         const savedVpScroll = oldVp ? { left: oldVp.scrollLeft, top: oldVp.scrollTop } : null;
@@ -127,13 +202,17 @@
         const collageMode = !!cs.collageMode;
         const snapToGrid = !!cs.snapToGrid;
         const showGrid = collageMode ? false : (cs.showGrid !== undefined ? cs.showGrid : state.canvasShowGrid);
+        const boardW = Number(cs.boardWidth) || 0;
+        const boardH = Number(cs.boardHeight) || 0;
+        const hasFixedBoard = boardW > 0 && boardH > 0;
+        const artBg = bgColor || (bgMode === 'dark' ? '#1C201E' : (bgMode === 'white' ? '#FFFFFF' : '#F8F7F4'));
 
         const allBoxes = [
           ...visualItems.map((it) => it.canvas),
           ...canvasElements
         ];
-        const maxRight = Math.max(2000, ...allBoxes.map((c) => (c.x || 0) + (c.w || 220) + 400));
-        const maxBottom = Math.max(1400, ...allBoxes.map((c) => (c.y || 0) + (c.h || 210) + 400));
+        const maxRight = Math.max(2000, boardW + 200, ...allBoxes.map((c) => (c.x || 0) + (c.w || 220) + 400));
+        const maxBottom = Math.max(1400, boardH + 200, ...allBoxes.map((c) => (c.y || 0) + (c.h || 210) + 400));
 
         const selectedList = [
           ...visualItems.filter((it) => state.selectedCanvasIds.has(it.id)).map((it) => ({ kind: 'item', obj: it, box: it.canvas })),
@@ -153,6 +232,7 @@
                   <button id="canvasAddFromInvBtn" class="tree-menu-item" type="button">📦 Aus Inventory</button>
                   <button id="canvasAddTextBtn" class="tree-menu-item" type="button">🔤 Text / Badge</button>
                   <button id="canvasAddPaletteBtn" class="tree-menu-item" type="button">🎨 Farbpalette</button>
+                  <button id="canvasAddLineBtn" class="tree-menu-item" type="button">➖ Linie</button>
                   <button id="canvasShowAllHiddenBtn" class="tree-menu-item" type="button" ${hiddenItems.length === 0 ? 'disabled style="opacity:0.45;"' : ''}>👁️ Alle Projekt-Elemente (${hiddenItems.length})</button>
                 </div>
               </div>
@@ -184,6 +264,23 @@
                         <input id="canvasBgColorInput" type="color" value="${escapeHtml(bgColor || '#F8F7F4')}" title="Eigene Hintergrundfarbe" />
                         <input id="canvasBgColorHex" class="form-control hex-input" type="text" maxlength="7" value="${escapeHtml((bgColor || '#F8F7F4').toUpperCase())}" placeholder="#F8F7F4" />
                       </div>
+                    </div>
+                  </div>
+                  <div>
+                    <div style="font-size:0.74rem; font-weight:600; color:var(--text-muted); margin-bottom:4px;">Board-Größe (Artboard)</div>
+                    <select id="canvasBoardPresetSelect" class="form-control" style="padding:4px 6px; font-size:0.78rem; margin-bottom:6px;">
+                      <option value="" ${!hasFixedBoard ? 'selected' : ''}>Frei (unbegrenzt)</option>
+                      <option value="1440x810" ${boardW === 1440 && boardH === 810 ? 'selected' : ''}>1440 × 810 (16:9)</option>
+                      <option value="1400x600" ${boardW === 1400 && boardH === 600 ? 'selected' : ''}>1400 × 600 (Panorama)</option>
+                      <option value="1220x600" ${boardW === 1220 && boardH === 600 ? 'selected' : ''}>1220 × 600 (Vision Board)</option>
+                      <option value="920x1160" ${boardW === 920 && boardH === 1160 ? 'selected' : ''}>920 × 1160 (Hochkant)</option>
+                      <option value="1080x1080" ${boardW === 1080 && boardH === 1080 ? 'selected' : ''}>1080 × 1080 (Quadrat)</option>
+                    </select>
+                    <div style="display:flex; gap:5px; align-items:center; margin-bottom:8px;">
+                      <input id="canvasBoardWInput" class="form-control" type="number" min="300" max="4000" value="${boardW || ''}" placeholder="Breite" style="padding:4px 6px; font-size:0.78rem;" />
+                      <span>×</span>
+                      <input id="canvasBoardHInput" class="form-control" type="number" min="300" max="4000" value="${boardH || ''}" placeholder="Höhe" style="padding:4px 6px; font-size:0.78rem;" />
+                      <button id="canvasBoardFreeBtn" class="btn btn-sm" type="button" title="Feste Größe aufheben">Frei</button>
                     </div>
                   </div>
                   <div>
@@ -228,7 +325,11 @@
                   <span class="sel-group" title="Form &amp; Format">
                     <button class="btn btn-sm ${(!fc.shape || fc.shape === 'rect') ? 'btn-oak' : ''}" data-sel-shape="rect" type="button" title="Rechteck">▭</button>
                     <button class="btn btn-sm ${fc.shape === 'rounded' ? 'btn-oak' : ''}" data-sel-shape="rounded" type="button" title="Abgerundet">▢</button>
+                    ${fc.shape === 'rounded' ? `<input id="selRadiusInput" class="form-control" type="number" min="2" max="140" value="${fc.borderRadius ?? 14}" title="Eckenradius (px)" style="width:46px; padding:3px 5px; font-size:0.78rem;" />` : ''}
                     <button class="btn btn-sm ${fc.shape === 'circle' ? 'btn-oak' : ''}" data-sel-shape="circle" type="button" title="Kreis">◯</button>
+                    <button class="btn btn-sm ${fc.shape === 'semicircle' ? 'btn-oak' : ''}" data-sel-shape="semicircle" type="button" title="Halbkreis">◐</button>
+                    <button class="btn btn-sm ${fc.shape === 'quartercircle' ? 'btn-oak' : ''}" data-sel-shape="quartercircle" type="button" title="Viertelkreis">◔</button>
+                    ${(fc.shape === 'semicircle' || fc.shape === 'quartercircle') ? `<button class="btn btn-sm" id="selRotateShapeBtn" type="button" title="Form um 90° drehen">↻</button>` : ''}
                     <select id="canvasRatioSelect" class="form-control" style="padding:3px 6px; font-size:0.78rem; width:auto;" title="Seitenverhältnis">
                       <option value="">Format…</option>
                       <option value="original">Original</option>
@@ -241,6 +342,7 @@
                     </button>
                     <button id="selRemoveBgBtn" class="btn btn-sm ${fc.removeWhiteBg ? 'btn-oak' : ''}" type="button" title="Weißen Hintergrund transparent freistellen">🪄 Freistellen</button>
                     ${fc.removeWhiteBg ? `<input id="selBgTolerance" type="range" min="1" max="60" value="${fc.bgTolerance ?? 8}" style="width:56px;" title="Weiß-Toleranz: ${fc.bgTolerance ?? 8}" />` : ''}
+                    <button id="selImgTextBtn" class="btn btn-sm ${fc.overlayText && (fc.overlayText.text || fc.overlayText.heading) ? 'btn-oak' : ''}" type="button" title="Text/Badge direkt auf diesem Bild anzeigen">🔤 Text</button>
                   </span>
                   <span class="sel-group" title="Rahmen &amp; Schatten">
                     <button class="btn btn-sm ${fCol ? 'btn-oak' : ''}" id="selFrameToggleBtn" type="button">⬜ Rand</button>
@@ -274,8 +376,9 @@
           </div>
 
           <div class="canvas-split-layout ${state.canvasSplitOpen ? 'with-split' : ''}">
-            <div id="canvasViewport" class="canvas-viewport ${showGrid ? '' : 'no-grid'} ${collageMode ? 'collage-mode' : ''} ${!bgColor && bgMode === 'white' ? 'bg-white' : (!bgColor && bgMode === 'dark' ? 'bg-dark' : '')}" style="${bgColor ? `background-color:${escapeHtml(bgColor)};` : ''}">
+            <div id="canvasViewport" class="canvas-viewport ${showGrid ? '' : 'no-grid'} ${collageMode ? 'collage-mode' : ''} ${!hasFixedBoard && !bgColor && bgMode === 'white' ? 'bg-white' : (!hasFixedBoard && !bgColor && bgMode === 'dark' ? 'bg-dark' : '')}" style="${!hasFixedBoard && bgColor ? `background-color:${escapeHtml(bgColor)};` : (hasFixedBoard ? 'background-color:var(--bg-color);' : '')}">
               <div id="canvasStage" class="canvas-stage" style="width:${Math.round(maxRight * state.canvasZoom)}px; height:${Math.round(maxBottom * state.canvasZoom)}px; transform: scale(${state.canvasZoom});">
+                ${hasFixedBoard ? `<div class="canvas-artboard" style="width:${boardW}px; height:${boardH}px; background-color:${escapeHtml(artBg)};"></div>` : ''}
                 ${(visualItems.length === 0 && canvasElements.length === 0) ? `
                   <div class="phase-placeholder" style="position:absolute; left:40px; top:40px; max-width:520px; z-index:5;">
                     <h3 style="margin-top:0; color:var(--text-primary);">Dieses Moodboard ist aktuell leer</h3>
@@ -296,7 +399,9 @@
                   const linkUrl = item.url || item.sourceUrl || '';
                   let domain = '';
                   try { if (linkUrl) domain = new URL(linkUrl).hostname.replace(/^www\./, ''); } catch (e) {}
-                  const shapeCls = c.shape === 'circle' ? 'shape-circle' : (c.shape === 'rounded' ? 'shape-rounded' : '');
+                  const shapeCls = ['circle', 'rounded', 'semicircle', 'quartercircle'].includes(c.shape) ? `shape-${c.shape}` : '';
+                  const brCss = getShapeBorderRadiusCss(c.shape, c.shapeAngle || 0, c.borderRadius ?? 14);
+                  const brStyle = brCss ? `border-radius:${brCss};` : '';
                   const fCol = c.frameColor || (c.frame === 'white' ? '#FFFFFF' : '');
                   const fWidth = Math.max(1, Number(c.frameWidth) || 6);
                   const frameStyle = fCol ? `border:${fWidth}px solid ${escapeHtml(fCol)};` : '';
@@ -306,11 +411,14 @@
                   const cy = c.cropY ?? 50;
                   const cz = c.cropZoom || 1;
                   const imgStyle = `object-position:${cx}% ${cy}%; transform:scale(${cz}); transform-origin:${cx}% ${cy}%;`;
+                  const ovHtml = (c.overlayText && (c.overlayText.text || c.overlayText.heading))
+                    ? `<div class="canvas-img-overlay-text">${renderTextContentHtml(c.overlayText)}</div>`
+                    : '';
                   return `
                     <div class="canvas-item ${isSelected ? 'selected' : ''} ${itemFit === 'contain' ? 'fit-contain' : ''} ${shapeCls} ${c.removeWhiteBg ? 'bg-removed' : ''}"
                          data-canvas-id="${rawItem.id}"
                          data-canvas-kind="item"
-                         style="left:${c.x}px; top:${c.y}px; width:${c.w}px; height:${c.h}px; z-index:${c.z || 1}; ${frameStyle} ${shadowStyle}">
+                         style="left:${c.x}px; top:${c.y}px; width:${c.w}px; height:${c.h}px; z-index:${c.z || 1}; ${brStyle} ${frameStyle} ${shadowStyle}">
                       ${hasVisual
                         ? `<img src="${escapeHtml(src)}" alt="${escapeHtml(item.title)}" data-drive-img="${item.driveFileId || ''}" style="${imgStyle}" />`
                         : `<div style="width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:12px; text-align:center; gap:6px; background:var(--card-bg);">
@@ -319,6 +427,7 @@
                              ${domain ? `<span style="font-size:0.7rem; color:var(--text-muted);">${escapeHtml(domain)}</span>` : ''}
                            </div>`
                       }
+                      ${ovHtml}
                       ${linkUrl ? `<a href="${escapeHtml(linkUrl)}" target="_blank" rel="noopener" data-canvas-link="1" title="Link öffnen" style="position:absolute; top:6px; right:6px; width:24px; height:24px; border-radius:50%; background:rgba(26,28,27,0.72); color:#fff; display:flex; align-items:center; justify-content:center; font-size:0.78rem; text-decoration:none;">↗</a>` : ''}
                       <div class="canvas-item-label">${escapeHtml(item.title || 'Bild')}</div>
                       ${state.canvasLocked ? '' : '<div class="canvas-resize-handle" data-resize-handle="1" title="Ecke ziehen (proportional) · Umschalt+Ziehen (frei)"></div>'}
@@ -328,6 +437,20 @@
 
                 ${canvasElements.map((el) => {
                   const isSelected = state.selectedCanvasIds.has(el.id);
+                  if (el.type === 'line') {
+                    const isVert = el.orientation === 'vertical';
+                    const thick = Math.max(1, Number(el.thickness) || 2);
+                    const lCol = el.color || '#262927';
+                    return `
+                      <div class="canvas-item ${isSelected ? 'selected' : ''}"
+                           data-canvas-id="${el.id}"
+                           data-canvas-kind="el"
+                           style="left:${el.x}px; top:${el.y}px; width:${el.w}px; height:${el.h}px; z-index:${el.z || 15}; box-shadow:none; display:flex; align-items:center; justify-content:center;">
+                        <div style="background:${escapeHtml(lCol)}; ${isVert ? `width:${thick}px; height:100%;` : `width:100%; height:${thick}px;`}"></div>
+                        ${state.canvasLocked ? '' : '<div class="canvas-resize-handle" data-resize-handle="1"></div>'}
+                      </div>
+                    `;
+                  }
                   if (el.type === 'palette') {
                     const colors = Array.isArray(el.colors) ? el.colors : ['#4A5D3B', '#A8A84D', '#5D8798', '#8BB5BF', '#EAEAEA'];
                     const isVert = el.orientation === 'vertical';
@@ -343,23 +466,19 @@
                       </div>
                     `;
                   }
-                  const shapeCls = el.shape === 'circle' ? 'shape-circle' : (el.shape === 'pill' ? 'shape-rounded' : '');
+                  const shapeCls = ['circle', 'semicircle', 'quartercircle'].includes(el.shape) ? `shape-${el.shape}` : (el.shape === 'pill' ? 'shape-rounded' : '');
+                  const brCss = getShapeBorderRadiusCss(el.shape, el.shapeAngle || 0, el.borderRadius ?? 12);
+                  const brStyle = brCss ? `border-radius:${brCss};` : '';
                   const fCol = el.frame ? (el.frameColor || '#FFFFFF') : '';
                   const frameStyle = fCol ? `border:6px solid ${escapeHtml(fCol)}; box-shadow:var(--shadow-md);` : '';
                   const bgStyle = el.shape === 'none' ? 'transparent' : (el.bgColor || '#262927');
-                  const fontFam = el.fontStyle === 'serif' ? 'Georgia, serif' : 'inherit';
-                  const align = el.textAlign || 'center';
-                  const justify = align === 'left' ? 'flex-start' : (align === 'right' ? 'flex-end' : 'center');
-                  const outlineCss = el.fontStyle === 'outline'
-                    ? `color:transparent; -webkit-text-stroke: 1.5px ${escapeHtml(el.color || '#A59858')};`
-                    : `color:${escapeHtml(el.color || '#262927')};`;
-                  const padStyle = el.shape === 'circle' ? 'padding:14%;' : '';
+                  const padStyle = ['circle', 'semicircle', 'quartercircle'].includes(el.shape) ? 'padding:14%;' : '';
                   return `
                     <div class="canvas-item ${isSelected ? 'selected' : ''} ${shapeCls}"
                          data-canvas-id="${el.id}"
                          data-canvas-kind="el"
-                         style="left:${el.x}px; top:${el.y}px; width:${el.w}px; height:${el.h}px; z-index:${el.z || 10}; background-color:${escapeHtml(bgStyle)}; ${frameStyle} ${el.shape === 'none' ? 'box-shadow:none;' : ''}">
-                      <div class="canvas-el-text" style="${padStyle} font-size:${Number(el.fontSize) || 24}px; font-family:${fontFam}; justify-content:center; font-weight:${el.fontStyle === 'outline' ? '800' : '500'}; ${outlineCss}"><span style="display:inline-block; width:100%; text-align:${align};">${escapeHtml(el.text || 'Text').replace(/\n/g, '<br>')}</span></div>
+                         style="left:${el.x}px; top:${el.y}px; width:${el.w}px; height:${el.h}px; z-index:${el.z || 10}; background-color:${escapeHtml(bgStyle)}; ${brStyle} ${frameStyle} ${el.shape === 'none' ? 'box-shadow:none;' : ''}">
+                      <div class="canvas-el-text" style="${padStyle} justify-content:center;">${renderTextContentHtml(el)}</div>
                       ${state.canvasLocked ? '' : '<div class="canvas-resize-handle" data-resize-handle="1"></div>'}
                     </div>
                   `;
@@ -922,6 +1041,80 @@
           renderCanvasView(container, statsEl, folderId);
         }
 
+        const selRotateBtn = document.getElementById('selRotateShapeBtn');
+        if (selRotateBtn) selRotateBtn.addEventListener('click', () => {
+          pushCanvasUndo(folderId);
+          visualItems.forEach((it) => {
+            if (!state.selectedCanvasIds.has(it.id)) return;
+            it.canvas.shapeAngle = ((Number(it.canvas.shapeAngle) || 0) + 90) % 360;
+          });
+          scheduleBoardSave(folderId);
+          renderCanvasView(container, statsEl, folderId);
+        });
+
+        const selRadiusInp = document.getElementById('selRadiusInput');
+        if (selRadiusInp) {
+          selRadiusInp.addEventListener('input', () => {
+            const rad = Math.max(2, Math.min(140, Number(selRadiusInp.value) || 14));
+            visualItems.forEach((it) => {
+              if (!state.selectedCanvasIds.has(it.id)) return;
+              it.canvas.borderRadius = rad;
+              const el = stage.querySelector(`.canvas-item[data-canvas-id="${it.id}"]`);
+              if (el) el.style.borderRadius = `${rad}px`;
+            });
+          });
+          selRadiusInp.addEventListener('change', () => scheduleBoardSave(folderId));
+        }
+
+        const selImgTextBtn = document.getElementById('selImgTextBtn');
+        if (selImgTextBtn) selImgTextBtn.addEventListener('click', () => {
+          const item = visualItems.find((it) => state.selectedCanvasIds.has(it.id));
+          if (!item) return;
+          if (!item.canvas.overlayText) {
+            item.canvas.overlayText = {
+              heading: '',
+              headingStyle: 'serif',
+              headingSize: 22,
+              headingDivider: false,
+              text: '',
+              fontSize: 18,
+              fontStyle: 'sans',
+              textAlign: 'center',
+              color: '#FFFFFF'
+            };
+          }
+          openCanvasElementEditor({ ...item.canvas.overlayText, type: 'text', _isImgOverlay: true, _targetItem: item }, folderId, container, statsEl);
+        });
+
+        const boardPresetSel = document.getElementById('canvasBoardPresetSelect');
+        if (boardPresetSel) boardPresetSel.addEventListener('change', (e) => {
+          const v = e.target.value;
+          if (!v) {
+            saveCanvasSetting({ boardWidth: 0, boardHeight: 0 });
+          } else {
+            const [w, h] = v.split('x').map(Number);
+            saveCanvasSetting({ boardWidth: w, boardHeight: h });
+          }
+          renderCanvasView(container, statsEl, folderId);
+        });
+        const boardWInp = document.getElementById('canvasBoardWInput');
+        const boardHInp = document.getElementById('canvasBoardHInput');
+        function applyCustomBoardSize() {
+          const w = Number(boardWInp?.value) || 0;
+          const h = Number(boardHInp?.value) || 0;
+          if (w >= 300 && h >= 300) {
+            saveCanvasSetting({ boardWidth: w, boardHeight: h });
+            renderCanvasView(container, statsEl, folderId);
+          }
+        }
+        if (boardWInp) boardWInp.addEventListener('change', applyCustomBoardSize);
+        if (boardHInp) boardHInp.addEventListener('change', applyCustomBoardSize);
+        const boardFreeBtn = document.getElementById('canvasBoardFreeBtn');
+        if (boardFreeBtn) boardFreeBtn.addEventListener('click', () => {
+          saveCanvasSetting({ boardWidth: 0, boardHeight: 0 });
+          renderCanvasView(container, statsEl, folderId);
+        });
+
         const layerUpBtn = document.getElementById('canvasLayerUpBtn');
         if (layerUpBtn) layerUpBtn.addEventListener('click', () => stepLayerOrder(1));
 
@@ -1024,8 +1217,29 @@
           renderCanvasView(container, statsEl, folderId);
         });
 
+        document.getElementById('canvasAddLineBtn').addEventListener('click', () => {
+          const all = getAllBoxEntries();
+          const maxZ = Math.max(1, ...all.map((e) => (e.box && e.box.z) || 1));
+          const newEl = {
+            id: uid('cel'),
+            type: 'line',
+            orientation: 'horizontal',
+            thickness: 2,
+            color: '#262927',
+            x: Math.round((viewport.scrollLeft + 100) / state.canvasZoom),
+            y: Math.round((viewport.scrollTop + 140) / state.canvasZoom),
+            w: 360,
+            h: 18,
+            z: maxZ + 1
+          };
+          content.board.canvasElements.push(newEl);
+          state.selectedCanvasIds = new Set([newEl.id]);
+          scheduleBoardSave(folderId);
+          renderCanvasView(container, statsEl, folderId);
+        });
+
         document.getElementById('canvasExportPngBtn').addEventListener('click', () => {
-          exportCanvasToPng(folderId, visualItems, canvasElements, bgColor, bgMode, fitMode, stage);
+          exportCanvasToPng(folderId, visualItems, canvasElements, bgColor, bgMode, fitMode, stage, boardW, boardH);
         });
 
         document.getElementById('canvasGridBtn').addEventListener('click', () => {
@@ -1201,7 +1415,36 @@
       }
 
       function openCanvasElementEditor(el, folderId, container, statsEl) {
-        if (el.type === 'text') {
+        if (el.type === 'line') {
+          document.getElementById('clOrientationSelect').value = el.orientation || 'horizontal';
+          document.getElementById('clThicknessInput').value = el.thickness || 2;
+          const lCol = (el.color || '#262927').toUpperCase();
+          document.getElementById('clColorInput').value = lCol;
+          document.getElementById('clColorHex').value = lCol;
+          bindHexColorPair(document.getElementById('clColorInput'), document.getElementById('clColorHex'), () => {});
+          document.getElementById('clSaveBtn').onclick = () => {
+            const nextOri = document.getElementById('clOrientationSelect').value;
+            if ((el.orientation || 'horizontal') !== nextOri) {
+              const oldW = el.w;
+              el.w = Math.max(18, el.h);
+              el.h = Math.max(18, oldW);
+            }
+            el.orientation = nextOri;
+            el.thickness = Math.max(1, Math.min(24, Number(document.getElementById('clThicknessInput').value) || 2));
+            el.color = document.getElementById('clColorInput').value;
+            scheduleBoardSave(folderId);
+            closeModal('canvasLineModal');
+            renderCanvasView(container, statsEl, folderId);
+          };
+          openModal('canvasLineModal');
+        } else if (el.type === 'text') {
+          const isImgOv = !!el._isImgOverlay;
+          const shapeGrp = document.getElementById('ctShapeGroup');
+          if (shapeGrp) shapeGrp.style.display = isImgOv ? 'none' : '';
+          document.getElementById('ctHeadingInput').value = el.heading || '';
+          document.getElementById('ctHeadingStyleSelect').value = el.headingStyle || 'serif';
+          document.getElementById('ctHeadingSizeInput').value = el.headingSize || 22;
+          document.getElementById('ctHeadingDividerCb').checked = !!el.headingDivider;
           document.getElementById('ctTextInput').value = el.text || '';
           document.getElementById('ctShapeSelect').value = el.shape || 'none';
           document.getElementById('ctFontSelect').value = el.fontStyle || 'sans';
@@ -1221,19 +1464,41 @@
           bindHexColorPair(document.getElementById('ctFrameColorInput'), document.getElementById('ctFrameColorHex'), () => {});
           document.getElementById('ctWhiteFrameCb').checked = !!el.frame;
           document.getElementById('ctSaveBtn').onclick = () => {
-            el.text = document.getElementById('ctTextInput').value || 'Text';
-            el.shape = document.getElementById('ctShapeSelect').value;
-            el.fontStyle = document.getElementById('ctFontSelect').value;
-            el.textAlign = document.getElementById('ctAlignSelect').value;
-            el.fontSize = Math.max(12, Math.min(96, Number(document.getElementById('ctFontSizeInput').value) || 24));
-            el.color = document.getElementById('ctColorInput').value;
-            el.bgColor = document.getElementById('ctBgColorInput').value;
-            el.frame = document.getElementById('ctWhiteFrameCb').checked;
-            el.frameColor = document.getElementById('ctFrameColorInput').value;
-            if (el.shape === 'circle') {
-              const s = Math.max(120, Math.min(el.w, el.h) < 120 ? 160 : el.w);
-              el.w = s;
-              el.h = s;
+            const heading = document.getElementById('ctHeadingInput').value.trim();
+            const headingStyle = document.getElementById('ctHeadingStyleSelect').value;
+            const headingSize = Math.max(12, Math.min(96, Number(document.getElementById('ctHeadingSizeInput').value) || 22));
+            const headingDivider = document.getElementById('ctHeadingDividerCb').checked;
+            const text = document.getElementById('ctTextInput').value;
+            const fontStyle = document.getElementById('ctFontSelect').value;
+            const textAlign = document.getElementById('ctAlignSelect').value;
+            const fontSize = Math.max(12, Math.min(96, Number(document.getElementById('ctFontSizeInput').value) || 24));
+            const color = document.getElementById('ctColorInput').value;
+
+            if (isImgOv && el._targetItem) {
+              if (!heading && !text.trim()) {
+                delete el._targetItem.canvas.overlayText;
+              } else {
+                el._targetItem.canvas.overlayText = { heading, headingStyle, headingSize, headingDivider, text, fontStyle, textAlign, fontSize, color };
+              }
+            } else {
+              el.heading = heading;
+              el.headingStyle = headingStyle;
+              el.headingSize = headingSize;
+              el.headingDivider = headingDivider;
+              el.text = text || (heading ? '' : 'Text');
+              el.shape = document.getElementById('ctShapeSelect').value;
+              el.fontStyle = fontStyle;
+              el.textAlign = textAlign;
+              el.fontSize = fontSize;
+              el.color = color;
+              el.bgColor = document.getElementById('ctBgColorInput').value;
+              el.frame = document.getElementById('ctWhiteFrameCb').checked;
+              el.frameColor = document.getElementById('ctFrameColorInput').value;
+              if (el.shape === 'circle') {
+                const s = Math.max(120, Math.min(el.w, el.h) < 120 ? 160 : el.w);
+                el.w = s;
+                el.h = s;
+              }
             }
             scheduleBoardSave(folderId);
             closeModal('canvasTextModal');
@@ -1294,7 +1559,79 @@
         }
       }
 
-      async function exportCanvasToPng(folderId, visualItems, canvasElements, bgColor, bgMode, fitMode, stage) {
+      function drawWrappedTextBlockOnCtx(ctx, el, x, y, bw, bh) {
+        const align = el.textAlign || 'center';
+        const col = el.color || '#262927';
+        const padX = ['circle', 'semicircle', 'quartercircle'].includes(el.shape) ? Math.round(bw * 0.14) : 12;
+        const maxTextW = Math.max(40, bw - padX * 2);
+        const tx = align === 'left' ? x + padX : (align === 'right' ? x + bw - padX : x + bw / 2);
+
+        const wrapParagraphs = (str, fontStr, fs) => {
+          ctx.font = fontStr;
+          const out = [];
+          for (const para of String(str || '').split('\n')) {
+            if (!para.trim()) { out.push(''); continue; }
+            let cur = '';
+            for (const word of para.split(/\s+/)) {
+              const test = cur ? `${cur} ${word}` : word;
+              if (ctx.measureText(test).width <= maxTextW) cur = test;
+              else { if (cur) out.push(cur); cur = word; }
+            }
+            if (cur) out.push(cur);
+          }
+          return out.map((t) => ({ text: t, font: fontStr, lh: fs * 1.2 }));
+        };
+
+        const rows = [];
+        if (el.heading) {
+          const hs = Number(el.headingSize) || 22;
+          const hStyle = el.headingStyle || 'serif';
+          const hFam = hStyle === 'serif' ? 'Georgia, serif' : 'system-ui, sans-serif';
+          const hText = hStyle === 'uppercase' ? el.heading.toUpperCase() : el.heading;
+          const hLines = wrapParagraphs(hText, `${hStyle === 'outline' ? '800' : '700'} ${hs}px ${hFam}`, hs);
+          hLines.forEach((l) => rows.push({ ...l, isOutline: hStyle === 'outline' }));
+          if (el.headingDivider) rows.push({ divider: true, lh: 10 });
+        }
+        if (el.text) {
+          const fs = Number(el.fontSize) || 24;
+          const fam = el.fontStyle === 'serif' ? 'Georgia, serif' : 'system-ui, sans-serif';
+          const bLines = wrapParagraphs(el.text, `${el.fontStyle === 'outline' ? '800' : '500'} ${fs}px ${fam}`, fs);
+          bLines.forEach((l) => rows.push({ ...l, isOutline: el.fontStyle === 'outline' }));
+        }
+        if (rows.length === 0) return;
+
+        const totalH = rows.reduce((s, r) => s + r.lh, 0);
+        let curY = y + (bh - totalH) / 2;
+        ctx.textAlign = align;
+        ctx.textBaseline = 'middle';
+        for (const r of rows) {
+          if (r.divider) {
+            ctx.save();
+            ctx.strokeStyle = col;
+            ctx.globalAlpha = 0.55;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(x + padX, curY + r.lh / 2);
+            ctx.lineTo(x + bw - padX, curY + r.lh / 2);
+            ctx.stroke();
+            ctx.restore();
+          } else {
+            ctx.font = r.font;
+            const cy = curY + r.lh / 2;
+            if (r.isOutline) {
+              ctx.strokeStyle = col;
+              ctx.lineWidth = 1.5;
+              ctx.strokeText(r.text, tx, cy);
+            } else {
+              ctx.fillStyle = col;
+              ctx.fillText(r.text, tx, cy);
+            }
+          }
+          curY += r.lh;
+        }
+      }
+
+      async function exportCanvasToPng(folderId, visualItems, canvasElements, bgColor, bgMode, fitMode, stage, fixedW = 0, fixedH = 0) {
         const entries = [
           ...visualItems.map((it) => ({ kind: 'item', obj: it, box: it.canvas })),
           ...canvasElements.map((el) => ({ kind: 'el', obj: el, box: el }))
@@ -1302,14 +1639,15 @@
 
         if (entries.length === 0) return;
         showSyncStatus('Erstelle Moodboard-PNG…', true);
-        const pad = 40;
-        const minX = Math.min(...entries.map((e) => e.box.x || 0));
-        const minY = Math.min(...entries.map((e) => e.box.y || 0));
-        const maxX = Math.max(...entries.map((e) => (e.box.x || 0) + (e.box.w || 200)));
-        const maxY = Math.max(...entries.map((e) => (e.box.y || 0) + (e.box.h || 200)));
+        const hasFixed = fixedW > 0 && fixedH > 0;
+        const pad = hasFixed ? 0 : 40;
+        const minX = hasFixed ? 0 : Math.min(...entries.map((e) => e.box.x || 0));
+        const minY = hasFixed ? 0 : Math.min(...entries.map((e) => e.box.y || 0));
+        const maxX = hasFixed ? fixedW : Math.max(...entries.map((e) => (e.box.x || 0) + (e.box.w || 200)));
+        const maxY = hasFixed ? fixedH : Math.max(...entries.map((e) => (e.box.y || 0) + (e.box.h || 200)));
         const scale = 2;
-        const w = Math.max(400, (maxX - minX) + pad * 2);
-        const h = Math.max(300, (maxY - minY) + pad * 2);
+        const w = hasFixed ? fixedW : Math.max(400, (maxX - minX) + pad * 2);
+        const h = hasFixed ? fixedH : Math.max(300, (maxY - minY) + pad * 2);
 
         const canvas = document.createElement('canvas');
         canvas.width = Math.round(w * scale);
@@ -1330,19 +1668,8 @@
             const imgEl = stage.querySelector(`.canvas-item[data-canvas-id="${e.obj.id}"] img`);
             if (!imgEl || !imgEl.complete || !imgEl.naturalWidth) continue;
             ctx.save();
-            if (e.box.shape === 'circle') {
-              ctx.beginPath();
-              ctx.arc(x + bw / 2, y + bh / 2, Math.min(bw, bh) / 2, 0, Math.PI * 2);
-              ctx.clip();
-            } else if (e.box.shape === 'rounded') {
-              ctx.beginPath();
-              ctx.roundRect(x, y, bw, bh, 12);
-              ctx.clip();
-            } else {
-              ctx.beginPath();
-              ctx.rect(x, y, bw, bh);
-              ctx.clip();
-            }
+            traceShapePathOnCtx(ctx, x, y, bw, bh, e.box.shape || 'rect', e.box.shapeAngle || 0, e.box.borderRadius ?? 14);
+            ctx.clip();
             const itemFit = e.box.fitMode || fitMode;
             const ir = imgEl.naturalWidth / imgEl.naturalHeight;
             const br = bw / bh;
@@ -1360,6 +1687,9 @@
               dy = y - (dh - bh) * cy;
             }
             try { ctx.drawImage(imgEl, dx, dy, dw, dh); } catch (err) {}
+            if (e.box.overlayText && (e.box.overlayText.text || e.box.overlayText.heading)) {
+              drawWrappedTextBlockOnCtx(ctx, { ...e.box.overlayText, shape: e.box.shape }, x, y, bw, bh);
+            }
             ctx.restore();
             const fCol = e.box.frameColor || (e.box.frame === 'white' ? '#FFFFFF' : '');
             const fw = Math.max(1, Number(e.box.frameWidth) || 6);
@@ -1367,15 +1697,20 @@
               ctx.save();
               ctx.strokeStyle = fCol;
               ctx.lineWidth = fw;
-              if (e.box.shape === 'circle') {
-                ctx.beginPath();
-                ctx.arc(x + bw / 2, y + bh / 2, Math.min(bw, bh) / 2 - fw / 2, 0, Math.PI * 2);
-                ctx.stroke();
-              } else {
-                ctx.strokeRect(x + fw / 2, y + fw / 2, bw - fw, bh - fw);
-              }
+              traceShapePathOnCtx(ctx, x + fw / 2, y + fw / 2, bw - fw, bh - fw, e.box.shape || 'rect', e.box.shapeAngle || 0, e.box.borderRadius ?? 14);
+              ctx.stroke();
               ctx.restore();
             }
+          } else if (e.obj.type === 'line') {
+            ctx.save();
+            ctx.fillStyle = e.obj.color || '#262927';
+            const thick = Math.max(1, Number(e.obj.thickness) || 2);
+            if (e.obj.orientation === 'vertical') {
+              ctx.fillRect(x + (bw - thick) / 2, y, thick, bh);
+            } else {
+              ctx.fillRect(x, y + (bh - thick) / 2, bw, thick);
+            }
+            ctx.restore();
           } else if (e.obj.type === 'palette') {
             const cols = Array.isArray(e.obj.colors) ? e.obj.colors : [];
             const gap = 8;
@@ -1412,55 +1747,13 @@
           } else if (e.obj.type === 'text') {
             ctx.save();
             const tfCol = e.obj.frameColor || '#FFFFFF';
-            if (e.obj.shape === 'circle') {
-              ctx.beginPath();
-              ctx.arc(x + bw / 2, y + bh / 2, Math.min(bw, bh) / 2, 0, Math.PI * 2);
-              ctx.fillStyle = e.obj.bgColor || '#262927';
-              ctx.fill();
-              if (e.obj.frame) { ctx.strokeStyle = tfCol; ctx.lineWidth = 6; ctx.stroke(); }
-            } else if (e.obj.shape === 'pill') {
-              ctx.beginPath();
-              ctx.roundRect(x, y, bw, bh, 12);
+            if (e.obj.shape && e.obj.shape !== 'none') {
+              traceShapePathOnCtx(ctx, x, y, bw, bh, e.obj.shape, e.obj.shapeAngle || 0, e.obj.borderRadius ?? 12);
               ctx.fillStyle = e.obj.bgColor || '#262927';
               ctx.fill();
               if (e.obj.frame) { ctx.strokeStyle = tfCol; ctx.lineWidth = 6; ctx.stroke(); }
             }
-            const fs = Number(e.obj.fontSize) || 24;
-            const fam = e.obj.fontStyle === 'serif' ? 'Georgia, serif' : 'system-ui, sans-serif';
-            ctx.font = `${e.obj.fontStyle === 'outline' ? '800' : '500'} ${fs}px ${fam}`;
-            const align = e.obj.textAlign || 'center';
-            ctx.textAlign = align;
-            ctx.textBaseline = 'middle';
-            const padX = e.obj.shape === 'circle' ? Math.round(bw * 0.14) : 12;
-            const maxTextW = Math.max(40, bw - padX * 2);
-            const tx = align === 'left' ? x + padX : (align === 'right' ? x + bw - padX : x + bw / 2);
-            const wrappedLines = [];
-            for (const para of String(e.obj.text || '').split('\n')) {
-              if (!para.trim()) { wrappedLines.push(''); continue; }
-              let curLine = '';
-              for (const word of para.split(/\s+/)) {
-                const test = curLine ? `${curLine} ${word}` : word;
-                if (ctx.measureText(test).width <= maxTextW) {
-                  curLine = test;
-                } else {
-                  if (curLine) wrappedLines.push(curLine);
-                  curLine = word;
-                }
-              }
-              if (curLine) wrappedLines.push(curLine);
-            }
-            const lh = fs * 1.2;
-            const startY = y + bh / 2 - ((wrappedLines.length - 1) * lh) / 2;
-            wrappedLines.forEach((ln, li) => {
-              if (e.obj.fontStyle === 'outline') {
-                ctx.strokeStyle = e.obj.color || '#A59858';
-                ctx.lineWidth = 1.5;
-                ctx.strokeText(ln, tx, startY + li * lh);
-              } else {
-                ctx.fillStyle = e.obj.color || '#262927';
-                ctx.fillText(ln, tx, startY + li * lh);
-              }
-            });
+            drawWrappedTextBlockOnCtx(ctx, e.obj, x, y, bw, bh);
             ctx.restore();
           }
         }
@@ -2015,6 +2308,11 @@ Antworte ausschließlich als JSON.`;
           content.board.canvasSettings.bgMode = 'custom';
         }
         content.board.canvasSettings.collageMode = true;
+        const allEndBoxes = [...visualItems.map((it) => it.canvas), ...(content.board.canvasElements || [])];
+        const autoW = Math.max(...allEndBoxes.map((b) => (b.x || 0) + (b.w || 200))) + 40;
+        const autoH = Math.max(...allEndBoxes.map((b) => (b.y || 0) + (b.h || 200))) + 40;
+        content.board.canvasSettings.boardWidth = autoW;
+        content.board.canvasSettings.boardHeight = autoH;
 
         state.selectedCanvasIds.clear();
         scheduleBoardSave(folderId);

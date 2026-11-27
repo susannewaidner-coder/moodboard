@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>Moodboard &amp; Projekt-Planer — Google Drive</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <link rel="stylesheet" href="css/styles.css?v=1.0.54" />
+  <link rel="stylesheet" href="css/styles.css?v=1.0.55" />
 </head>
 </head>
 <body>
@@ -488,20 +488,45 @@
         <button class="btn-icon" data-close-modal="canvasTextModal" type="button">✕</button>
       </div>
       <div class="form-group">
+        <label class="form-label" for="ctHeadingInput">Überschrift (optional)</label>
+        <input id="ctHeadingInput" class="form-control" type="text" placeholder="z. B. WEDDING VISION BOARD" />
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 82px auto; gap:8px; align-items:end; margin-bottom:10px;">
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label" for="ctHeadingStyleSelect">Überschrift-Format</label>
+          <select id="ctHeadingStyleSelect" class="form-control">
+            <option value="serif">Editorial (Serif)</option>
+            <option value="sans">Modern (Sans)</option>
+            <option value="uppercase">Großbuchstaben</option>
+            <option value="outline">Kontur (Outline)</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label" for="ctHeadingSizeInput">Größe</label>
+          <input id="ctHeadingSizeInput" class="form-control" type="number" min="12" max="96" value="22" />
+        </div>
+        <label style="display:flex; align-items:center; gap:5px; font-size:0.8rem; cursor:pointer; padding-bottom:8px;">
+          <input id="ctHeadingDividerCb" type="checkbox" />
+          <span>Linie</span>
+        </label>
+      </div>
+      <div class="form-group">
         <label class="form-label" for="ctTextInput">Text</label>
-        <textarea id="ctTextInput" class="form-control" rows="2" placeholder="z. B. COASTAL oder Minimalist Design"></textarea>
+        <textarea id="ctTextInput" class="form-control" rows="2" placeholder="z. B. COASTAL oder Leitidee..."></textarea>
       </div>
       <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;">
-        <div class="form-group">
+        <div class="form-group" id="ctShapeGroup">
           <label class="form-label" for="ctShapeSelect">Form</label>
           <select id="ctShapeSelect" class="form-control">
             <option value="none">Freier Text</option>
             <option value="pill">Box / Pill</option>
-            <option value="circle">Kreis-Badge</option>
+            <option value="circle">◯ Kreis-Badge</option>
+            <option value="semicircle">◐ Halbkreis</option>
+            <option value="quartercircle">◔ Viertelkreis</option>
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label" for="ctFontSelect">Schriftstil</label>
+          <label class="form-label" for="ctFontSelect">Text-Stil</label>
           <select id="ctFontSelect" class="form-control">
             <option value="sans">Modern (Sans)</option>
             <option value="serif">Editorial (Serif)</option>
@@ -648,6 +673,42 @@
   </div>
 
   <!-- ======================================================================
+       MODAL: LINIE BEARBEITEN
+       ====================================================================== -->
+  <div id="canvasLineModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="canvasLineModalTitle">
+    <div class="modal-card" style="max-width:400px;">
+      <div class="modal-header">
+        <h2 id="canvasLineModalTitle" class="modal-title">➖ Linie bearbeiten</h2>
+        <button class="btn-icon" data-close-modal="canvasLineModal" type="button">✕</button>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <div class="form-group">
+          <label class="form-label" for="clOrientationSelect">Ausrichtung</label>
+          <select id="clOrientationSelect" class="form-control">
+            <option value="horizontal">Waagerecht</option>
+            <option value="vertical">Senkrecht</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="clThicknessInput">Breite / Dicke (px)</label>
+          <input id="clThicknessInput" class="form-control" type="number" min="1" max="24" value="2" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="clColorInput">Farbe</label>
+        <div class="hex-color-pair">
+          <input id="clColorInput" type="color" value="#262927" />
+          <input id="clColorHex" class="form-control hex-input" type="text" maxlength="7" value="#262927" placeholder="#262927" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" data-close-modal="canvasLineModal" type="button">Abbrechen</button>
+        <button id="clSaveBtn" class="btn btn-primary" type="button">Übernehmen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================
        MODAL: UNIVERSELLES DIALOG-MODAL (ERSETZT ALERT / CONFIRM / PROMPT)
        ====================================================================== -->
   <!-- ======================================================================
@@ -708,9 +769,9 @@
     </div>
   </div>
 
-  <script defer src="js/core.js?v=1.0.54"></script>
-  <script defer src="js/views.js?v=1.0.54"></script>
-  <script defer src="js/canvas-home.js?v=1.0.54"></script>
-  <script defer src="js/ai-pdf.js?v=1.0.54"></script>
+  <script defer src="js/core.js?v=1.0.55"></script>
+  <script defer src="js/views.js?v=1.0.55"></script>
+  <script defer src="js/canvas-home.js?v=1.0.55"></script>
+  <script defer src="js/ai-pdf.js?v=1.0.55"></script>
 </body>
 </html>

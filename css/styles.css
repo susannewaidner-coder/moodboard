@@ -1068,15 +1068,38 @@
       background-color: transparent !important;
     }
 
-    .canvas-item.shape-circle .canvas-resize-handle {
-      right: 14%;
-      bottom: 14%;
+    .canvas-item.shape-circle .canvas-resize-handle,
+    .canvas-item.shape-semicircle .canvas-resize-handle,
+    .canvas-item.shape-quartercircle .canvas-resize-handle {
+      right: 12%;
+      bottom: 12%;
       width: 18px;
       height: 18px;
       border-radius: 50%;
       background: var(--accent-oak);
       border: 2px solid #FFFFFF;
       box-shadow: var(--shadow-sm);
+    }
+
+    .canvas-artboard {
+      position: absolute;
+      left: 0;
+      top: 0;
+      border: 1px dashed var(--accent-oak);
+      box-shadow: var(--shadow-md);
+      pointer-events: none;
+    }
+
+    .canvas-img-overlay-text {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 14%;
+      pointer-events: none;
+      text-shadow: 0 1px 6px rgba(0, 0, 0, 0.25);
     }
 
     .canvas-item.frame-white {
