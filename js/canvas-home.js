@@ -1541,21 +1541,13 @@
         const elements = [];
         let zCounter = 1;
 
-        function layoutRow(rowIds, rowH, rowX = startX, rowW = boardW) {
+        function layoutRow(rowIds, forcedH = null, rowX = startX, rowW = boardW) {
           if (rowIds.length === 0) return;
-          if (rowIds.length === 1) {
-            const id = rowIds[0];
-            const ar = Math.max(0.55, Math.min(1.85, getImgAr(id)));
-            const w = Math.min(rowW, Math.round(rowH * ar));
-            const x = rowX + Math.round((rowW - w) / 2);
-            itemsLayout.push({ id, x, y: curY, w, h: rowH, z: zCounter++, shape: 'rect', frameColor: '', shadow: false });
-            curY += rowH + gap;
-            return;
-          }
           const totalGap = gap * (rowIds.length - 1);
           const availW = rowW - totalGap;
-          const aspects = rowIds.map((id) => Math.max(0.48, Math.min(2.0, getImgAr(id))));
+          const aspects = rowIds.map((id) => Math.max(0.45, Math.min(2.1, getImgAr(id))));
           const sumAr = aspects.reduce((s, a) => s + a, 0);
+          const rowH = forcedH || Math.max(150, Math.min(340, Math.round(availW / sumAr)));
           let curX = rowX;
           rowIds.forEach((id, idx) => {
             const isLast = idx === rowIds.length - 1;
@@ -1566,17 +1558,34 @@
           curY += rowH + gap;
         }
 
-        function layoutRemainingRows(remIds, perRowMax = isWide ? 4 : 3) {
+        function layoutRemainingRows(remIds, perRowMax = isWide ? 5 : 3) {
+          const targetMinH = isWide ? 185 : 175;
+          const targetMaxH = isWide ? 310 : 290;
           let rIdx = 0;
           while (rIdx < remIds.length) {
             const remaining = remIds.length - rIdx;
-            let count = Math.min(perRowMax, remaining);
-            if (perRowMax === 4 && remaining === 5) count = 3;
-            else if (perRowMax === 3 && remaining === 4) count = 2;
-            const rowIds = remIds.slice(rIdx, rIdx + count);
-            const rowH = count === 1 ? 260 : (count === 2 ? 250 : (count === 3 ? 225 : 200));
-            layoutRow(rowIds, rowH);
-            rIdx += count;
+            if (remaining <= 2) {
+              layoutRow(remIds.slice(rIdx));
+              break;
+            }
+            let chosenCount = Math.min(perRowMax, remaining);
+            for (let c = 2; c <= Math.min(perRowMax, remaining); c++) {
+              // Vermeide, dass genau 1 Bild übrig bleibt
+              if (remaining - c === 1) continue;
+              const slice = remIds.slice(rIdx, rIdx + c);
+              const sumAr = slice.reduce((s, id) => s + Math.max(0.45, Math.min(2.1, getImgAr(id))), 0);
+              const estH = (boardW - gap * (c - 1)) / sumAr;
+              chosenCount = c;
+              if (estH <= targetMaxH && estH >= targetMinH) break;
+              if (estH < targetMinH) {
+                chosenCount = Math.max(2, c - 1);
+                if (remaining - chosenCount === 1 && c <= remaining) chosenCount = c;
+                break;
+              }
+            }
+            if (remaining - chosenCount === 1 && chosenCount > 2) chosenCount--;
+            layoutRow(remIds.slice(rIdx, rIdx + chosenCount));
+            rIdx += chosenCount;
           }
         }
 
@@ -1947,7 +1956,7 @@ Antworte ausschließlich als JSON.`;
               const imgAr = aspectWtoHMap.get(it.id) || 1;
               const tileAr = p.w / Math.max(1, p.h);
               const mismatch = Math.max(imgAr / tileAr, tileAr / imgAr);
-              it.canvas.fitMode = (p.shape !== 'circle' && mismatch > 1.38) ? 'contain' : 'cover';
+              it.canvas.fitMode = (p.shape !== 'circle' && mismatch > 1.55) ? 'contain' : 'cover';
               delete it.canvas.frame;
             } else if (it.canvas.shape === 'circle') {
               const s = Math.min(it.canvas.w, it.canvas.h);
