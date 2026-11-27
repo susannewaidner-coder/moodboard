@@ -420,6 +420,7 @@
                     ${!isPh ? `
                       <select id="canvasRatioSelect" class="form-control" style="padding:3px 6px; font-size:0.78rem; width:auto;" title="Seitenverhältnis">
                         <option value="">Format…</option>
+                        <option value="free" ${fc.freeResize ? 'selected' : ''}>🔓 Frei</option>
                         <option value="original">Original</option>
                         <option value="1:1">1:1</option>
                         <option value="4:3">4:3</option>
@@ -521,7 +522,7 @@
                       ${ovHtml}
                       ${linkUrl ? `<a href="${escapeHtml(linkUrl)}" target="_blank" rel="noopener" data-canvas-link="1" title="Link öffnen" style="position:absolute; top:6px; right:6px; width:24px; height:24px; border-radius:50%; background:rgba(26,28,27,0.72); color:#fff; display:flex; align-items:center; justify-content:center; font-size:0.78rem; text-decoration:none;">↗</a>` : ''}
                       <div class="canvas-item-label">${escapeHtml(item.title || 'Bild')}</div>
-                      ${state.canvasLocked ? '' : '<div class="canvas-resize-handle" data-resize-handle="1" title="Ecke ziehen (proportional) · Umschalt+Ziehen (frei)"></div>'}
+                      ${state.canvasLocked ? '' : `<div class="canvas-resize-handle" data-resize-handle="1" title="${c.freeResize ? 'Ecke ziehen (frei skalierbar)' : 'Ecke ziehen (proportional) · Umschalt+Ziehen (frei)'}"></div>`}
                     </div>
                   `;
                 }).join('')}
@@ -851,15 +852,21 @@
             ? visualItems.filter((it) => state.selectedCanvasIds.has(it.id))
             : visualItems;
           for (const it of targets) {
-            if (mode === '1:1') { it.canvas.w = 220; it.canvas.h = 220; }
-            else if (mode === '4:3') { it.canvas.w = 240; it.canvas.h = 180; }
-            else if (mode === '3:4') { it.canvas.w = 200; it.canvas.h = 266; }
-            else if (mode === 'original') {
-              const imgEl = stage.querySelector(`.canvas-item[data-canvas-id="${it.id}"] img`);
-              if (imgEl && imgEl.naturalWidth > 0 && imgEl.naturalHeight > 0) {
-                const ratio = imgEl.naturalHeight / imgEl.naturalWidth;
-                it.canvas.w = 230;
-                it.canvas.h = Math.max(100, Math.min(420, Math.round(230 * ratio)));
+            if (mode === 'free') {
+              it.canvas.freeResize = true;
+              if (!it.canvas.fitMode && fitMode === 'contain') it.canvas.fitMode = 'cover';
+            } else {
+              delete it.canvas.freeResize;
+              if (mode === '1:1') { it.canvas.w = 220; it.canvas.h = 220; }
+              else if (mode === '4:3') { it.canvas.w = 240; it.canvas.h = 180; }
+              else if (mode === '3:4') { it.canvas.w = 200; it.canvas.h = 266; }
+              else if (mode === 'original') {
+                const imgEl = stage.querySelector(`.canvas-item[data-canvas-id="${it.id}"] img`);
+                if (imgEl && imgEl.naturalWidth > 0 && imgEl.naturalHeight > 0) {
+                  const ratio = imgEl.naturalHeight / imgEl.naturalWidth;
+                  it.canvas.w = 230;
+                  it.canvas.h = Math.max(100, Math.min(420, Math.round(230 * ratio)));
+                }
               }
             }
           }
@@ -1487,9 +1494,11 @@
           }
 
           const isResize = e.target.hasAttribute('data-resize-handle');
-          const aspectRatio = box.shape === 'circle'
-            ? 1
-            : (kind === 'item' ? ((box.h || 200) / Math.max(1, box.w || 200)) : 0);
+          const aspectRatio = box.freeResize
+            ? 0
+            : (box.shape === 'circle'
+                ? 1
+                : (kind === 'item' ? ((box.h || 200) / Math.max(1, box.w || 200)) : 0));
 
           activeAction = {
             type: isResize ? 'resize' : 'drag',
