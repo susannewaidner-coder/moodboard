@@ -475,6 +475,7 @@
                 <button class="btn btn-sm" id="canvasLayerUpBtn" type="button" title="Eine Ebene nach vorne">⬆️</button>
                 <button class="btn btn-sm" id="canvasLayerDownBtn" type="button" title="Eine Ebene nach hinten">⬇️</button>
                 ${firstSel && firstSel.kind === 'item' ? '<button class="btn btn-sm" id="selResetBtn" type="button" title="Form, Rand, Schatten, Ausschnitt &amp; Format zurücksetzen">↺</button>' : ''}
+                ${!isInventoryFolder(folderId) && selectedList.some((s) => s.kind === 'item' && s.obj.type !== 'ref') ? '<button class="btn btn-oak btn-sm" id="selMoveToInvBtn" type="button" title="Ausgewählte Bilder ins Inventory verschieben &amp; verknüpfen">📦 Ins Inventory</button>' : ''}
                 <button class="btn btn-sm" id="selRemoveCanvasBtn" type="button" style="color:var(--danger);" title="Vom Moodboard entfernen">🗑</button>
               </span>
             ` : `<span style="color:var(--text-muted);">Klicke auf ein Element auf dem Board, um Form, Rand, Ausschnitt oder Ebene anzupassen…</span>`}
@@ -1139,6 +1140,11 @@
         if (selEditElBtn) selEditElBtn.addEventListener('click', () => {
           const el = canvasElements.find((e) => state.selectedCanvasIds.has(e.id));
           if (el) openCanvasElementEditor(el, folderId, container, statsEl);
+        });
+
+        const selMoveInvBtn = document.getElementById('selMoveToInvBtn');
+        if (selMoveInvBtn) selMoveInvBtn.addEventListener('click', () => {
+          bulkMoveItemsToInventory(folderId, state.selectedCanvasIds);
         });
 
         const selRemoveBtn = document.getElementById('selRemoveCanvasBtn');

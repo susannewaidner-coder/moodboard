@@ -607,19 +607,19 @@
             ` : ''}
           </div>
 
-          ${state.selectedGalleryIds.size > 0 ? `
+          ${(state.gallerySelectMode || state.selectedGalleryIds.size > 0) ? `
             <div class="bulk-action-bar">
               <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                 <strong style="font-size:0.84rem;">${state.selectedGalleryIds.size} ausgewählt</strong>
                 <button id="bulkSelectAllBtn" class="btn btn-sm" type="button">Alle (${items.length + docs.length})</button>
-                <button id="bulkClearBtn" class="btn btn-sm" type="button">Aufheben</button>
+                <button id="bulkClearBtn" class="btn btn-sm" type="button" ${state.selectedGalleryIds.size === 0 ? 'disabled' : ''}>Aufheben</button>
               </div>
               <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                ${!isInvFolder ? '<button id="bulkMoveToInvBtn" class="btn btn-oak btn-sm" type="button">📦 Ins Inventory</button>' : ''}
-                <button id="bulkMoveFolderBtn" class="btn btn-sm" type="button">📁 Verschieben</button>
-                <button id="bulkSetLocBtn" class="btn btn-sm" type="button">📍 Lagerort</button>
-                <button id="bulkToggleCanvasBtn" class="btn btn-sm" type="button">🎨 Moodboard an/aus</button>
-                <button id="bulkDeleteBtn" class="btn btn-sm" type="button" style="color:var(--danger); border-color:var(--danger);">🗑 Löschen</button>
+                ${!isInvFolder ? `<button id="bulkMoveToInvBtn" class="btn btn-oak btn-sm" type="button" ${state.selectedGalleryIds.size === 0 ? 'disabled' : ''}>📦 Ins Inventory</button>` : ''}
+                <button id="bulkMoveFolderBtn" class="btn btn-sm" type="button" ${state.selectedGalleryIds.size === 0 ? 'disabled' : ''}>📁 Verschieben</button>
+                <button id="bulkSetLocBtn" class="btn btn-sm" type="button" ${state.selectedGalleryIds.size === 0 ? 'disabled' : ''}>📍 Lagerort</button>
+                <button id="bulkToggleCanvasBtn" class="btn btn-sm" type="button" ${state.selectedGalleryIds.size === 0 ? 'disabled' : ''}>🎨 Moodboard an/aus</button>
+                <button id="bulkDeleteBtn" class="btn btn-sm" type="button" style="color:var(--danger); border-color:var(--danger);" ${state.selectedGalleryIds.size === 0 ? 'disabled' : ''}>🗑 Löschen</button>
               </div>
             </div>
           ` : ''}
@@ -2130,22 +2130,24 @@
         }
       }
 
-      async function bulkMoveItemsToInventory(sourceFolderId) {
+      async function bulkMoveItemsToInventory(sourceFolderId, idSet = state.selectedGalleryIds) {
         const invFolders = getInventoryFolders();
         if (invFolders.length === 0) return;
+        const sourceFcPre = state.folderContents[sourceFolderId];
+        const preTargets = sourceFcPre ? (sourceFcPre.board.items || []).filter((it) => idSet.has(it.id) && it.type !== 'ref') : [];
         const options = invFolders.map((f) => ({
           value: f.id,
           label: `📦 ${f.name === '_Inventory' ? 'Inventory (Hauptordner)' : f.name}`
         }));
         openFolderSelectModal({
-          title: `${state.selectedGalleryIds.size} Element(e) ins Inventory verschieben`,
+          title: `${preTargets.length || idSet.size} Element(e) ins Inventory verschieben`,
           desc: 'Die ausgewählten Elemente werden ins Inventory verschoben und bleiben hier als Verknüpfung erhalten.',
           options,
           confirmText: 'Verschieben & verknüpfen',
           onConfirm: async (targetInvId) => {
             const sourceFc = state.folderContents[sourceFolderId];
             if (!sourceFc) return;
-            const targets = (sourceFc.board.items || []).filter((it) => state.selectedGalleryIds.has(it.id) && it.type !== 'ref');
+            const targets = (sourceFc.board.items || []).filter((it) => idSet.has(it.id) && it.type !== 'ref');
             if (targets.length === 0) {
               await uiAlert('Die ausgewählten Elemente sind bereits Verknüpfungen.');
               return;
@@ -2163,6 +2165,7 @@
                 scheduleBoardSave(sourceFolderId);
               }
               state.selectedGalleryIds.clear();
+              if (idSet === state.selectedCanvasIds) state.selectedCanvasIds.clear();
               state.gallerySelectMode = false;
               renderMainView();
               showSyncStatus(`✅ ${targets.length} Element(e) ins Inventory verschoben`, true);
@@ -2214,6 +2217,7 @@
                 }
               }
               state.selectedGalleryIds.clear();
+              if (idSet === state.selectedCanvasIds) state.selectedCanvasIds.clear();
               state.gallerySelectMode = false;
               renderMainView();
               showSyncStatus(`✅ ${targets.length + docTargets.length} Element(e) verschoben`, true);
