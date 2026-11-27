@@ -327,31 +327,52 @@
           );
           if (!rescanAll) { renderMainView(); return; }
 
+          const allFolderItems = content.board.items || [];
+          const nonImageCount = Math.max(0, allFolderItems.length - images.length);
           const targets = images.filter((it) => !(it.targetItem || it).ai || !(it.targetItem || it).ai.description);
           const list = targets.length > 0 ? targets : images;
+          const skippedAlready = targets.length > 0 ? (images.length - targets.length) : 0;
+          let enrichedCount = 0;
+          const skippedNoSrc = [];
+          const skippedNoRes = [];
+          let abortedReason = '';
+
           for (let i = 0; i < list.length; i++) {
             const item = list[i];
             const target = item.targetItem || item;
             const targetFId = item.targetFolderId || folderId;
+            const title = item.title || target.title || `Bild ${i + 1}`;
             const src = item.localDataUrl || (item.driveFileId && state.mode === 'drive' ? await DriveAdapter.fetchBlobUrl(item.driveFileId) : '');
-            if (!src) continue;
+            if (!src) {
+              skippedNoSrc.push(title);
+              continue;
+            }
             showSyncStatus(`Gemini reichert Bild ${i + 1} von ${list.length} an…`, true);
             try {
               const gRes = await analyzeImageWithGemini(src, geminiKey);
               if (gRes) {
                 applyGeminiResultToItem(target, gRes, false);
                 scheduleBoardSave(targetFId);
+                enrichedCount++;
+              } else {
+                skippedNoRes.push(title);
               }
             } catch (err) {
               console.warn('Gemini Fehler:', err);
-              await uiAlert('Gemini-Anreicherung abgebrochen: ' + err.message, 'Fehler');
+              abortedReason = err.message;
               break;
             }
             if (i < list.length - 1) await new Promise((r) => setTimeout(r, 2000));
           }
-          showSyncStatus('KI-Anreicherung abgeschlossen!', true);
-          setTimeout(() => showSyncStatus('', false), 2200);
+          showSyncStatus('', false);
           renderMainView();
+          const lines = [`✅ Erfolgreich angereichert: ${enrichedCount} von ${list.length}`];
+          if (skippedAlready > 0) lines.push(`⏭️ Bereits mit Beschreibung (übersprungen): ${skippedAlready}`);
+          if (nonImageCount > 0) lines.push(`ℹ️ Nicht-Bild-Elemente (z. B. Bookmarks): ${nonImageCount}`);
+          if (skippedNoSrc.length > 0) lines.push(`⚠️ Keine Bildquelle geladen (${skippedNoSrc.length}): ${skippedNoSrc.slice(0, 5).join(', ')}${skippedNoSrc.length > 5 ? ' …' : ''}`);
+          if (skippedNoRes.length > 0) lines.push(`⚠️ Kein gültiges KI-Ergebnis (${skippedNoRes.length}): ${skippedNoRes.slice(0, 5).join(', ')}${skippedNoRes.length > 5 ? ' …' : ''}`);
+          if (abortedReason) lines.push(`❌ Abgebrochen: ${abortedReason}`);
+          await uiAlert(lines.join('\n'), abortedReason ? 'KI-Anreicherung abgebrochen' : 'KI-Anreicherung abgeschlossen');
           return;
         }
 
