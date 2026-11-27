@@ -1543,13 +1543,18 @@
 
         function layoutRow(rowIds, rowH, rowX = startX, rowW = boardW) {
           if (rowIds.length === 0) return;
+          if (rowIds.length === 1) {
+            const id = rowIds[0];
+            const ar = Math.max(0.55, Math.min(1.85, getImgAr(id)));
+            const w = Math.min(rowW, Math.round(rowH * ar));
+            const x = rowX + Math.round((rowW - w) / 2);
+            itemsLayout.push({ id, x, y: curY, w, h: rowH, z: zCounter++, shape: 'rect', frameColor: '', shadow: false });
+            curY += rowH + gap;
+            return;
+          }
           const totalGap = gap * (rowIds.length - 1);
           const availW = rowW - totalGap;
-          const aspects = rowIds.map((id) => {
-            const it = idMap.get(id);
-            const ar = (it.canvas && it.canvas.w && it.canvas.h) ? (it.canvas.w / it.canvas.h) : 1;
-            return Math.max(0.55, Math.min(1.85, ar));
-          });
+          const aspects = rowIds.map((id) => Math.max(0.48, Math.min(2.0, getImgAr(id))));
           const sumAr = aspects.reduce((s, a) => s + a, 0);
           let curX = rowX;
           rowIds.forEach((id, idx) => {
@@ -1565,9 +1570,11 @@
           let rIdx = 0;
           while (rIdx < remIds.length) {
             const remaining = remIds.length - rIdx;
-            const count = remaining === 4 && perRowMax === 3 ? 2 : Math.min(perRowMax, remaining);
+            let count = Math.min(perRowMax, remaining);
+            if (perRowMax === 4 && remaining === 5) count = 3;
+            else if (perRowMax === 3 && remaining === 4) count = 2;
             const rowIds = remIds.slice(rIdx, rIdx + count);
-            const rowH = count === 1 ? 260 : (count === 2 ? 250 : (count === 3 ? 220 : 195));
+            const rowH = count === 1 ? 260 : (count === 2 ? 250 : (count === 3 ? 225 : 200));
             layoutRow(rowIds, rowH);
             rIdx += count;
           }
