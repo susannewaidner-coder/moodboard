@@ -230,6 +230,7 @@
                   <button id="canvasAddImageBtn" class="tree-menu-item" type="button">🖼️ Bild hochladen</button>
                   <button id="canvasAddBookmarkBtn" class="tree-menu-item" type="button">🔗 Web-Bookmark</button>
                   <button id="canvasAddFromInvBtn" class="tree-menu-item" type="button">📦 Aus Inventory</button>
+                  <button id="canvasAddPlaceholderBtn" class="tree-menu-item" type="button">⬜ Platzhalter</button>
                   <button id="canvasAddTextBtn" class="tree-menu-item" type="button">🔤 Text / Badge</button>
                   <button id="canvasAddPaletteBtn" class="tree-menu-item" type="button">🎨 Farbpalette</button>
                   <button id="canvasAddLineBtn" class="tree-menu-item" type="button">➖ Linie</button>
@@ -239,7 +240,7 @@
 
               <button id="canvasUndoBtn" class="btn btn-sm" type="button" ${undoCount === 0 ? 'disabled' : ''} title="Letzte Änderung rückgängig machen (Strg+Z)">↩️</button>
               <button id="canvasLockBtn" class="btn btn-sm ${state.canvasLocked ? 'btn-oak' : ''}" type="button" title="Verschieben sperren/entsperren">
-                ${state.canvasLocked ? '🔒 Gesperrt' : '🔓 Frei'}
+                ${state.canvasLocked ? '🔒' : '🔓'}
               </button>
 
               <div class="pill-group" style="padding:2px;">
@@ -247,7 +248,9 @@
                 <button id="canvasResetViewBtn" class="pill-btn" type="button" title="Zoom auf 100 % zurücksetzen und nach oben links scrollen" style="font-size:0.76rem; padding:0 6px;">${Math.round(state.canvasZoom * 100)} %</button>
                 <button id="canvasZoomInBtn" class="pill-btn" type="button" title="Vergrößern">＋</button>
               </div>
+            </div>
 
+            <div class="canvas-toolbar-group">
               <div class="canvas-options-wrap">
                 <button id="canvasOptionsBtn" class="btn btn-sm" type="button">⚙️ Board ▾</button>
                 <div id="canvasOptionsPopover" class="canvas-options-popover hidden">
@@ -289,22 +292,27 @@
                       <button id="canvasGridBtn" class="btn btn-sm ${showGrid ? '' : 'btn-oak'}" type="button" style="flex:1;">${showGrid ? 'Raster: An' : 'Raster: Aus'}</button>
                       <button id="canvasSnapBtn" class="btn btn-sm ${snapToGrid ? 'btn-oak' : ''}" type="button" style="flex:1;" title="Beim Verschieben und Skalieren am 12px-Raster einrasten">${snapToGrid ? '🧲 Snap: An' : '🧲 Snap: Aus'}</button>
                     </div>
-                    <button id="canvasAutoLayoutBtn" class="btn btn-sm" type="button" style="width:100%;" title="Richtet alle Kacheln sauber im Raster an">📐 Alle Kacheln neu anordnen</button>
+                    <button id="canvasAutoLayoutBtn" class="btn btn-sm" type="button" style="width:100%; margin-bottom:8px;" title="Richtet alle Kacheln sauber im Raster an">📐 Alle Kacheln neu anordnen</button>
+                  </div>
+                  <div>
+                    <div style="font-size:0.74rem; font-weight:600; color:var(--text-muted); margin-bottom:4px;">Erkannte Board-Farben (Klick = kopieren)</div>
+                    <div id="canvasPaletteBar" class="canvas-palette-bar" style="flex-wrap:wrap;">
+                      <span style="font-size:0.76rem; color:var(--text-muted);">Farben…</span>
+                    </div>
                   </div>
                 </div>
               </div>
+
+              <button id="canvasAiLayoutBtn" class="btn btn-sm" type="button" title="KI-Layout-Vorschlag im Editorial-/Collage-Stil erstellen">✨ KI-Layout</button>
+              <button id="canvasTemplatesBtn" class="btn btn-sm" type="button" title="Moodboard als Template speichern oder Template laden">📑 Templates</button>
+              <button id="canvasCollageBtn" class="btn btn-sm ${collageMode ? 'btn-oak' : ''}" type="button" title="Blendet Titel, Links und Raster für den sauberen Collage-Look aus">✨ Collage</button>
             </div>
 
             <div class="canvas-toolbar-group">
-              <div id="canvasPaletteBar" class="canvas-palette-bar">
-                <span style="font-size:0.76rem; color:var(--text-muted);">Farben…</span>
-              </div>
-              <button id="canvasAiLayoutBtn" class="btn btn-sm" type="button" title="KI-Layout-Vorschlag im Editorial-/Collage-Stil erstellen">✨ KI-Layout</button>
-              <button id="canvasCollageBtn" class="btn btn-sm ${collageMode ? 'btn-oak' : ''}" type="button" title="Blendet Titel, Links und Raster für den sauberen Collage-Look aus">✨ Collage</button>
               <button id="canvasExportPngBtn" class="btn btn-sm" type="button" title="Moodboard als PNG-Bild herunterladen">📸 PNG</button>
               <button id="canvasSplitBtn" class="btn btn-sm ${state.canvasSplitOpen ? 'btn-primary' : ''}" type="button">📋 Planung</button>
               <button id="canvasFullscreenBtn" class="btn btn-sm ${state.canvasFullscreen ? 'btn-primary' : ''}" type="button" title="Moodboard auf ganzes Browserfenster vergrößern">
-                ${state.canvasFullscreen ? '✕ Vollbild' : '⛶ Vollbild'}
+                ${state.canvasFullscreen ? '✕' : '⛶'}
               </button>
             </div>
           </div>
@@ -315,14 +323,16 @@
               ${selectedList.length > 0 ? `<button class="btn btn-sm" id="canvasDeselectAllBtn" type="button" title="Auswahl aufheben">✕ (${selectedList.length})</button>` : ''}
             </span>
             ${selectedList.length > 0 ? `
-              ${firstSel && firstSel.kind === 'item' ? (() => {
+              ${firstSel && (firstSel.kind === 'item' || firstSel.obj.type === 'placeholder') ? (() => {
                 const fc = firstSel.box;
+                const isPh = firstSel.obj.type === 'placeholder';
                 const fCol = fc.frameColor || (fc.frame === 'white' ? '#FFFFFF' : '');
                 const fWidth = Math.max(1, Number(fc.frameWidth) || 6);
                 const hasShadow = fc.shadow !== false;
                 const selFit = fc.fitMode || fitMode;
                 return `
                   <span class="sel-group" title="Form &amp; Format">
+                    ${isPh ? '<button id="selAssignPlaceholderBtn" class="btn btn-oak btn-sm" type="button">🖼️ Bild zuweisen</button>' : ''}
                     <button class="btn btn-sm ${(!fc.shape || fc.shape === 'rect') ? 'btn-oak' : ''}" data-sel-shape="rect" type="button" title="Rechteck">▭</button>
                     <button class="btn btn-sm ${fc.shape === 'rounded' ? 'btn-oak' : ''}" data-sel-shape="rounded" type="button" title="Abgerundet">▢</button>
                     ${fc.shape === 'rounded' ? `<input id="selRadiusInput" class="form-control" type="number" min="2" max="140" value="${fc.borderRadius ?? 14}" title="Eckenradius (px)" style="width:46px; padding:3px 5px; font-size:0.78rem;" />` : ''}
@@ -330,19 +340,21 @@
                     <button class="btn btn-sm ${fc.shape === 'semicircle' ? 'btn-oak' : ''}" data-sel-shape="semicircle" type="button" title="Halbkreis">◐</button>
                     <button class="btn btn-sm ${fc.shape === 'quartercircle' ? 'btn-oak' : ''}" data-sel-shape="quartercircle" type="button" title="Viertelkreis">◔</button>
                     ${(fc.shape === 'semicircle' || fc.shape === 'quartercircle') ? `<button class="btn btn-sm" id="selRotateShapeBtn" type="button" title="Form um 90° drehen">↻</button>` : ''}
-                    <select id="canvasRatioSelect" class="form-control" style="padding:3px 6px; font-size:0.78rem; width:auto;" title="Seitenverhältnis">
-                      <option value="">Format…</option>
-                      <option value="original">Original</option>
-                      <option value="1:1">1:1</option>
-                      <option value="4:3">4:3</option>
-                      <option value="3:4">3:4</option>
-                    </select>
-                    <button id="canvasFitBtn" class="btn btn-sm ${selFit === 'contain' ? 'btn-oak' : ''}" type="button" title="Bilddarstellung umschalten: Kachel ausfüllen vs. Ganzes Bild">
-                      ${selFit === 'contain' ? '🖼️ Ganz' : '✂️ Füllen'}
-                    </button>
-                    <button id="selRemoveBgBtn" class="btn btn-sm ${fc.removeWhiteBg ? 'btn-oak' : ''}" type="button" title="Weißen Hintergrund transparent freistellen">🪄 Freistellen</button>
-                    ${fc.removeWhiteBg ? `<input id="selBgTolerance" type="range" min="1" max="60" value="${fc.bgTolerance ?? 8}" style="width:56px;" title="Weiß-Toleranz: ${fc.bgTolerance ?? 8}" />` : ''}
-                    <button id="selImgTextBtn" class="btn btn-sm ${fc.overlayText && (fc.overlayText.text || fc.overlayText.heading) ? 'btn-oak' : ''}" type="button" title="Text/Badge direkt auf diesem Bild anzeigen">🔤 Text</button>
+                    ${!isPh ? `
+                      <select id="canvasRatioSelect" class="form-control" style="padding:3px 6px; font-size:0.78rem; width:auto;" title="Seitenverhältnis">
+                        <option value="">Format…</option>
+                        <option value="original">Original</option>
+                        <option value="1:1">1:1</option>
+                        <option value="4:3">4:3</option>
+                        <option value="3:4">3:4</option>
+                      </select>
+                      <button id="canvasFitBtn" class="btn btn-sm ${selFit === 'contain' ? 'btn-oak' : ''}" type="button" title="Bilddarstellung umschalten: Kachel ausfüllen vs. Ganzes Bild">
+                        ${selFit === 'contain' ? '🖼️ Ganz' : '✂️ Füllen'}
+                      </button>
+                      <button id="selRemoveBgBtn" class="btn btn-sm ${fc.removeWhiteBg ? 'btn-oak' : ''}" type="button" title="Weißen Hintergrund transparent freistellen">🪄 Freistellen</button>
+                      ${fc.removeWhiteBg ? `<input id="selBgTolerance" type="range" min="1" max="60" value="${fc.bgTolerance ?? 8}" style="width:56px;" title="Weiß-Toleranz: ${fc.bgTolerance ?? 8}" />` : ''}
+                    ` : ''}
+                    <button id="selImgTextBtn" class="btn btn-sm ${fc.overlayText && (fc.overlayText.text || fc.overlayText.heading) ? 'btn-oak' : ''}" type="button" title="Text/Badge direkt auf dieser Kachel anzeigen">🔤 Text</button>
                   </span>
                   <span class="sel-group" title="Rahmen &amp; Schatten">
                     <button class="btn btn-sm ${fCol ? 'btn-oak' : ''}" id="selFrameToggleBtn" type="button">⬜ Rand</button>
@@ -353,15 +365,17 @@
                     </div>
                     <button class="btn btn-sm ${hasShadow ? 'btn-oak' : ''}" id="selShadowToggleBtn" type="button" title="Schatten ein-/ausschalten">🌑</button>
                   </span>
-                  <span class="sel-group" title="Bildausschnitt (X / Y / Zoom)">
-                    <span>🔍</span>
-                    <input id="selCropX" type="range" min="0" max="100" value="${fc.cropX ?? 50}" style="width:44px;" title="Ausschnitt Links/Rechts" />
-                    <input id="selCropY" type="range" min="0" max="100" value="${fc.cropY ?? 50}" style="width:44px;" title="Ausschnitt Oben/Unten" />
-                    <input id="selCropZoom" type="range" min="1" max="2.5" step="0.05" value="${fc.cropZoom || 1}" style="width:48px;" title="Ausschnitt Zoom" />
-                  </span>
+                  ${!isPh ? `
+                    <span class="sel-group" title="Bildausschnitt (X / Y / Zoom)">
+                      <span>🔍</span>
+                      <input id="selCropX" type="range" min="0" max="100" value="${fc.cropX ?? 50}" style="width:44px;" title="Ausschnitt Links/Rechts" />
+                      <input id="selCropY" type="range" min="0" max="100" value="${fc.cropY ?? 50}" style="width:44px;" title="Ausschnitt Oben/Unten" />
+                      <input id="selCropZoom" type="range" min="1" max="2.5" step="0.05" value="${fc.cropZoom || 1}" style="width:48px;" title="Ausschnitt Zoom" />
+                    </span>
+                  ` : ''}
                 `;
               })() : ''}
-              ${firstSel && firstSel.kind === 'el' ? `
+              ${firstSel && firstSel.kind === 'el' && firstSel.obj.type !== 'placeholder' ? `
                 <span class="sel-group">
                   <button class="btn btn-sm" id="selEditElBtn" type="button">✏️ Bearbeiten</button>
                 </span>
@@ -437,6 +451,31 @@
 
                 ${canvasElements.map((el) => {
                   const isSelected = state.selectedCanvasIds.has(el.id);
+                  if (el.type === 'placeholder') {
+                    const shapeCls = ['circle', 'rounded', 'semicircle', 'quartercircle'].includes(el.shape) ? `shape-${el.shape}` : '';
+                    const brCss = getShapeBorderRadiusCss(el.shape, el.shapeAngle || 0, el.borderRadius ?? 14);
+                    const brStyle = brCss ? `border-radius:${brCss};` : '';
+                    const fCol = el.frameColor || '';
+                    const fWidth = Math.max(1, Number(el.frameWidth) || 6);
+                    const frameStyle = fCol ? `border:${fWidth}px solid ${escapeHtml(fCol)};` : '';
+                    const shadowStyle = el.shadow === false ? 'box-shadow:none;' : (fCol ? 'box-shadow:var(--shadow-md);' : '');
+                    const ovHtml = (el.overlayText && (el.overlayText.text || el.overlayText.heading))
+                      ? `<div class="canvas-img-overlay-text">${renderTextContentHtml(el.overlayText)}</div>`
+                      : '';
+                    return `
+                      <div class="canvas-item ${isSelected ? 'selected' : ''} ${shapeCls}"
+                           data-canvas-id="${el.id}"
+                           data-canvas-kind="el"
+                           style="left:${el.x}px; top:${el.y}px; width:${el.w}px; height:${el.h}px; z-index:${el.z || 2}; ${brStyle} ${frameStyle} ${shadowStyle}">
+                        <div class="canvas-el-placeholder" style="${brStyle}">
+                          <span style="font-size:1.5rem;">🖼️</span>
+                          <span>Platzhalter<br><span style="font-size:0.68rem;">Doppelklick für Bild</span></span>
+                        </div>
+                        ${ovHtml}
+                        ${state.canvasLocked ? '' : '<div class="canvas-resize-handle" data-resize-handle="1"></div>'}
+                      </div>
+                    `;
+                  }
                   if (el.type === 'line') {
                     const isVert = el.orientation === 'vertical';
                     const thick = Math.max(1, Number(el.thickness) || 2);
@@ -866,16 +905,17 @@
           selBgTol.addEventListener('change', () => scheduleBoardSave(folderId));
         }
 
+        const getSelTiles = () => getAllBoxEntries().filter((e) => state.selectedCanvasIds.has(e.obj.id) && (e.kind === 'item' || e.obj.type === 'placeholder'));
+
         document.querySelectorAll('#canvasSelectionBar [data-sel-shape]').forEach((btn) => {
           btn.addEventListener('click', () => {
             const shape = btn.getAttribute('data-sel-shape');
-            for (const it of visualItems) {
-              if (!state.selectedCanvasIds.has(it.id)) continue;
-              it.canvas.shape = shape;
+            for (const entry of getSelTiles()) {
+              entry.box.shape = shape;
               if (shape === 'circle') {
-                const size = Math.min(it.canvas.w || 200, it.canvas.h || 200);
-                it.canvas.w = size;
-                it.canvas.h = size;
+                const size = Math.min(entry.box.w || 200, entry.box.h || 200);
+                entry.box.w = size;
+                entry.box.h = size;
               }
             }
             scheduleBoardSave(folderId);
@@ -885,11 +925,11 @@
 
         const selFrameBtn = document.getElementById('selFrameToggleBtn');
         if (selFrameBtn) selFrameBtn.addEventListener('click', () => {
-          const selItems = visualItems.filter((it) => state.selectedCanvasIds.has(it.id));
-          const allFramed = selItems.every((it) => !!(it.canvas.frameColor || it.canvas.frame === 'white'));
-          selItems.forEach((it) => {
-            it.canvas.frameColor = allFramed ? '' : '#FFFFFF';
-            delete it.canvas.frame;
+          const selTiles = getSelTiles();
+          const allFramed = selTiles.every((e) => !!(e.box.frameColor || e.box.frame === 'white'));
+          selTiles.forEach((e) => {
+            e.box.frameColor = allFramed ? '' : '#FFFFFF';
+            delete e.box.frame;
           });
           scheduleBoardSave(folderId);
           renderCanvasView(container, statsEl, folderId);
@@ -899,12 +939,11 @@
           document.getElementById('selFrameColorInput'),
           document.getElementById('selFrameColorHex'),
           (col) => {
-            visualItems.forEach((it) => {
-              if (!state.selectedCanvasIds.has(it.id)) return;
-              it.canvas.frameColor = col;
-              delete it.canvas.frame;
-              const fw = Math.max(1, Number(it.canvas.frameWidth) || 6);
-              const el = stage.querySelector(`.canvas-item[data-canvas-id="${it.id}"]`);
+            getSelTiles().forEach((e) => {
+              e.box.frameColor = col;
+              delete e.box.frame;
+              const fw = Math.max(1, Number(e.box.frameWidth) || 6);
+              const el = stage.querySelector(`.canvas-item[data-canvas-id="${e.obj.id}"]`);
               if (el) el.style.border = `${fw}px solid ${col}`;
             });
             scheduleBoardSave(folderId);
@@ -915,12 +954,11 @@
         if (selFrameWidthInp) {
           selFrameWidthInp.addEventListener('input', () => {
             const fw = Math.max(1, Math.min(24, Number(selFrameWidthInp.value) || 6));
-            visualItems.forEach((it) => {
-              if (!state.selectedCanvasIds.has(it.id)) return;
-              it.canvas.frameWidth = fw;
-              if (!it.canvas.frameColor && it.canvas.frame !== 'white') it.canvas.frameColor = '#FFFFFF';
-              const fCol = it.canvas.frameColor || '#FFFFFF';
-              const el = stage.querySelector(`.canvas-item[data-canvas-id="${it.id}"]`);
+            getSelTiles().forEach((e) => {
+              e.box.frameWidth = fw;
+              if (!e.box.frameColor && e.box.frame !== 'white') e.box.frameColor = '#FFFFFF';
+              const fCol = e.box.frameColor || '#FFFFFF';
+              const el = stage.querySelector(`.canvas-item[data-canvas-id="${e.obj.id}"]`);
               if (el) el.style.border = `${fw}px solid ${fCol}`;
             });
           });
@@ -929,9 +967,9 @@
 
         const selShadowBtn = document.getElementById('selShadowToggleBtn');
         if (selShadowBtn) selShadowBtn.addEventListener('click', () => {
-          const selItems = visualItems.filter((it) => state.selectedCanvasIds.has(it.id));
-          const allOn = selItems.every((it) => it.canvas.shadow !== false);
-          selItems.forEach((it) => { it.canvas.shadow = !allOn; });
+          const selTiles = getSelTiles();
+          const allOn = selTiles.every((e) => e.box.shadow !== false);
+          selTiles.forEach((e) => { e.box.shadow = !allOn; });
           scheduleBoardSave(folderId);
           renderCanvasView(container, statsEl, folderId);
         });
@@ -1041,12 +1079,17 @@
           renderCanvasView(container, statsEl, folderId);
         }
 
+        const selAssignPhBtn = document.getElementById('selAssignPlaceholderBtn');
+        if (selAssignPhBtn) selAssignPhBtn.addEventListener('click', () => {
+          const ph = canvasElements.find((e) => e.type === 'placeholder' && state.selectedCanvasIds.has(e.id));
+          if (ph) openPlaceholderPickerModal(ph, folderId, container, statsEl);
+        });
+
         const selRotateBtn = document.getElementById('selRotateShapeBtn');
         if (selRotateBtn) selRotateBtn.addEventListener('click', () => {
           pushCanvasUndo(folderId);
-          visualItems.forEach((it) => {
-            if (!state.selectedCanvasIds.has(it.id)) return;
-            it.canvas.shapeAngle = ((Number(it.canvas.shapeAngle) || 0) + 90) % 360;
+          getSelTiles().forEach((e) => {
+            e.box.shapeAngle = ((Number(e.box.shapeAngle) || 0) + 90) % 360;
           });
           scheduleBoardSave(folderId);
           renderCanvasView(container, statsEl, folderId);
@@ -1056,10 +1099,9 @@
         if (selRadiusInp) {
           selRadiusInp.addEventListener('input', () => {
             const rad = Math.max(2, Math.min(140, Number(selRadiusInp.value) || 14));
-            visualItems.forEach((it) => {
-              if (!state.selectedCanvasIds.has(it.id)) return;
-              it.canvas.borderRadius = rad;
-              const el = stage.querySelector(`.canvas-item[data-canvas-id="${it.id}"]`);
+            getSelTiles().forEach((e) => {
+              e.box.borderRadius = rad;
+              const el = stage.querySelector(`.canvas-item[data-canvas-id="${e.obj.id}"]`);
               if (el) el.style.borderRadius = `${rad}px`;
             });
           });
@@ -1068,10 +1110,10 @@
 
         const selImgTextBtn = document.getElementById('selImgTextBtn');
         if (selImgTextBtn) selImgTextBtn.addEventListener('click', () => {
-          const item = visualItems.find((it) => state.selectedCanvasIds.has(it.id));
-          if (!item) return;
-          if (!item.canvas.overlayText) {
-            item.canvas.overlayText = {
+          const entry = getSelTiles()[0];
+          if (!entry) return;
+          if (!entry.box.overlayText) {
+            entry.box.overlayText = {
               heading: '',
               headingStyle: 'serif',
               headingSize: 22,
@@ -1083,7 +1125,7 @@
               color: '#FFFFFF'
             };
           }
-          openCanvasElementEditor({ ...item.canvas.overlayText, type: 'text', _isImgOverlay: true, _targetItem: item }, folderId, container, statsEl);
+          openCanvasElementEditor({ ...entry.box.overlayText, type: 'text', _isImgOverlay: true, _targetBox: entry.box }, folderId, container, statsEl);
         });
 
         const boardPresetSel = document.getElementById('canvasBoardPresetSelect');
@@ -1140,6 +1182,30 @@
 
         document.getElementById('canvasCollageBtn').addEventListener('click', () => {
           saveCanvasSetting({ collageMode: !collageMode });
+          renderCanvasView(container, statsEl, folderId);
+        });
+
+        document.getElementById('canvasTemplatesBtn').addEventListener('click', () => {
+          openTemplatesModal(folderId, container, statsEl);
+        });
+
+        document.getElementById('canvasAddPlaceholderBtn').addEventListener('click', () => {
+          const all = getAllBoxEntries();
+          const maxZ = Math.max(1, ...all.map((e) => (e.box && e.box.z) || 1));
+          const newEl = {
+            id: uid('cel'),
+            type: 'placeholder',
+            x: Math.round((viewport.scrollLeft + 100) / state.canvasZoom),
+            y: Math.round((viewport.scrollTop + 100) / state.canvasZoom),
+            w: 220,
+            h: 220,
+            z: maxZ + 1,
+            shape: 'rect'
+          };
+          pushCanvasUndo(folderId);
+          content.board.canvasElements.push(newEl);
+          state.selectedCanvasIds = new Set([newEl.id]);
+          scheduleBoardSave(folderId);
           renderCanvasView(container, statsEl, folderId);
         });
 
@@ -1299,7 +1365,12 @@
           if (!itemEl) return;
           const id = itemEl.getAttribute('data-canvas-id');
           const el = canvasElements.find((x) => x.id === id);
-          if (el) openCanvasElementEditor(el, folderId, container, statsEl);
+          if (!el) return;
+          if (el.type === 'placeholder') {
+            openPlaceholderPickerModal(el, folderId, container, statsEl);
+          } else {
+            openCanvasElementEditor(el, folderId, container, statsEl);
+          }
         });
 
         viewport.addEventListener('pointerdown', (e) => {
@@ -1474,11 +1545,12 @@
             const fontSize = Math.max(12, Math.min(96, Number(document.getElementById('ctFontSizeInput').value) || 24));
             const color = document.getElementById('ctColorInput').value;
 
-            if (isImgOv && el._targetItem) {
+            const targetBox = el._targetBox || (el._targetItem && el._targetItem.canvas);
+            if (isImgOv && targetBox) {
               if (!heading && !text.trim()) {
-                delete el._targetItem.canvas.overlayText;
+                delete targetBox.overlayText;
               } else {
-                el._targetItem.canvas.overlayText = { heading, headingStyle, headingSize, headingDivider, text, fontStyle, textAlign, fontSize, color };
+                targetBox.overlayText = { heading, headingStyle, headingSize, headingDivider, text, fontStyle, textAlign, fontSize, color };
               }
             } else {
               el.heading = heading;
@@ -1744,6 +1816,20 @@
                 }
               });
             }
+          } else if (e.obj.type === 'placeholder') {
+            ctx.save();
+            traceShapePathOnCtx(ctx, x, y, bw, bh, e.obj.shape || 'rect', e.obj.shapeAngle || 0, e.obj.borderRadius ?? 14);
+            ctx.fillStyle = '#EFECE5';
+            ctx.fill();
+            ctx.strokeStyle = '#B8B0A0';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([6, 4]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            if (e.obj.overlayText && (e.obj.overlayText.text || e.obj.overlayText.heading)) {
+              drawWrappedTextBlockOnCtx(ctx, { ...e.obj.overlayText, shape: e.obj.shape }, x, y, bw, bh);
+            }
+            ctx.restore();
           } else if (e.obj.type === 'text') {
             ctx.save();
             const tfCol = e.obj.frameColor || '#FFFFFF';
@@ -2747,3 +2833,259 @@ Antworte ausschließlich als JSON.`;
           uiAlert('Ungültiges JSON: ' + err.message, 'Fehler');
         }
       });
+
+      function openPlaceholderPickerModal(placeholderEl, folderId, container, statsEl) {
+        const content = state.folderContents[folderId];
+        if (!content || !placeholderEl) return;
+        const grid = document.getElementById('placeholderPickGrid');
+        const invBtn = document.getElementById('phPickFromInvBtn');
+        const upBtn = document.getElementById('phUploadNewBtn');
+        if (!grid) return;
+
+        function applyBoxToItem(item) {
+          pushCanvasUndo(folderId);
+          item.canvasHidden = false;
+          item.canvas = {
+            ...(item.canvas || {}),
+            x: placeholderEl.x,
+            y: placeholderEl.y,
+            w: placeholderEl.w,
+            h: placeholderEl.h,
+            z: placeholderEl.z || 1,
+            shape: placeholderEl.shape || 'rect',
+            shapeAngle: placeholderEl.shapeAngle || 0,
+            borderRadius: placeholderEl.borderRadius ?? 14,
+            frameColor: placeholderEl.frameColor || '',
+            frameWidth: placeholderEl.frameWidth || 6,
+            shadow: placeholderEl.shadow !== false,
+            overlayText: placeholderEl.overlayText ? { ...placeholderEl.overlayText } : undefined
+          };
+          content.board.canvasElements = (content.board.canvasElements || []).filter((e) => e.id !== placeholderEl.id);
+          state.selectedCanvasIds = new Set([item.id]);
+          scheduleBoardSave(folderId);
+          closeModal('placeholderPickModal');
+          renderCanvasView(container, statsEl, folderId);
+        }
+
+        function renderProjectImages() {
+          const items = (content.board.items || []).filter((it) => {
+            const res = resolveBoardItem(it, folderId);
+            return res.kind === 'image' && res.imageSrc;
+          });
+          if (items.length === 0) {
+            grid.innerHTML = '<div style="grid-column:1/-1; padding:18px; text-align:center; color:var(--text-secondary);">Noch keine Bilder in diesem Projektordner. Wähle „Aus Inventory wählen“ oder lade ein neues Bild hoch.</div>';
+            return;
+          }
+          grid.innerHTML = items.map((it) => {
+            const res = resolveBoardItem(it, folderId);
+            return `
+              <button type="button" class="btn" data-ph-item-id="${escapeHtml(it.id)}" style="display:flex; flex-direction:column; align-items:stretch; padding:6px; gap:6px; text-align:left;">
+                <img src="${escapeHtml(res.imageSrc)}" alt="" style="width:100%; height:96px; object-fit:cover; border-radius:6px;" />
+                <span style="font-size:0.76rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(res.title || 'Bild')}</span>
+              </button>
+            `;
+          }).join('');
+          grid.querySelectorAll('[data-ph-item-id]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+              const id = btn.getAttribute('data-ph-item-id');
+              const item = (content.board.items || []).find((x) => x.id === id);
+              if (item) applyBoxToItem(item);
+            });
+          });
+        }
+
+        function renderInventoryImages() {
+          const invItems = (state.inventory || []).filter((inv) => inv.imageSrc || inv.driveFileId);
+          if (invItems.length === 0) {
+            grid.innerHTML = '<div style="grid-column:1/-1; padding:18px; text-align:center; color:var(--text-secondary);">Keine Bilder im Inventory vorhanden.</div>';
+            return;
+          }
+          grid.innerHTML = invItems.map((inv) => {
+            const src = inv.imageSrc || (inv.driveFileId ? getDriveImageUrl(inv.driveFileId) : '');
+            return `
+              <button type="button" class="btn" data-ph-inv-id="${escapeHtml(inv.id)}" style="display:flex; flex-direction:column; align-items:stretch; padding:6px; gap:6px; text-align:left;">
+                <img src="${escapeHtml(src)}" alt="" style="width:100%; height:96px; object-fit:cover; border-radius:6px;" />
+                <span style="font-size:0.76rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(inv.title || 'Inventory-Bild')}</span>
+              </button>
+            `;
+          }).join('');
+          grid.querySelectorAll('[data-ph-inv-id]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+              const invId = btn.getAttribute('data-ph-inv-id');
+              const existing = (content.board.items || []).find((x) => x.kind === 'inventoryRef' && x.inventoryId === invId);
+              if (existing) {
+                applyBoxToItem(existing);
+                return;
+              }
+              const newItem = {
+                id: uid('b'),
+                kind: 'inventoryRef',
+                inventoryId: invId,
+                notes: '',
+                canvas: {}
+              };
+              content.board.items.push(newItem);
+              applyBoxToItem(newItem);
+            });
+          });
+        }
+
+        if (invBtn) {
+          let showingInv = false;
+          invBtn.textContent = '📦 Aus Inventory wählen';
+          invBtn.onclick = () => {
+            showingInv = !showingInv;
+            invBtn.textContent = showingInv ? '🖼️ Projekt-Bilder zeigen' : '📦 Aus Inventory wählen';
+            if (showingInv) renderInventoryImages();
+            else renderProjectImages();
+          };
+        }
+        if (upBtn) {
+          upBtn.onclick = () => {
+            closeModal('placeholderPickModal');
+            const up = document.getElementById('fileUploadInput');
+            if (up) up.click();
+          };
+        }
+
+        renderProjectImages();
+        openModal('placeholderPickModal');
+      }
+
+      function openTemplatesModal(folderId, container, statsEl) {
+        const content = state.folderContents[folderId];
+        if (!content) return;
+        const listEl = document.getElementById('templatesList');
+        const nameInp = document.getElementById('newTemplateNameInput');
+        const saveBtn = document.getElementById('saveCurrentAsTemplateBtn');
+        if (!listEl || !nameInp || !saveBtn) return;
+
+        function renderList() {
+          const tpls = Array.isArray(state.boardTemplates) ? state.boardTemplates : [];
+          if (tpls.length === 0) {
+            listEl.innerHTML = '<div style="padding:16px; text-align:center; color:var(--text-secondary); font-size:0.86rem;">Noch keine Templates gespeichert. Gib oben einen Namen ein und speichere dein aktuelles Board!</div>';
+            return;
+          }
+          listEl.innerHTML = tpls.map((tpl) => {
+            const slotCount = Array.isArray(tpl.slots) ? tpl.slots.length : 0;
+            const elCount = Array.isArray(tpl.elements) ? tpl.elements.length : 0;
+            const sizeLabel = tpl.boardWidth > 0 && tpl.boardHeight > 0 ? `${tpl.boardWidth}×${tpl.boardHeight}px` : 'Frei';
+            return `
+              <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; border:1px solid var(--border-color); border-radius:var(--radius-md); background:var(--card-subtle);">
+                <div style="min-width:0;">
+                  <div style="font-weight:600; font-size:0.9rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(tpl.name || 'Template')}</div>
+                  <div style="font-size:0.76rem; color:var(--text-secondary);">${sizeLabel} · ${slotCount} Bild-Slots · ${elCount} Elemente</div>
+                </div>
+                <div style="display:flex; gap:6px; flex-shrink:0;">
+                  <button type="button" class="btn btn-oak btn-sm" data-tpl-apply="${escapeHtml(tpl.id)}">Anwenden</button>
+                  <button type="button" class="btn btn-danger btn-sm" data-tpl-del="${escapeHtml(tpl.id)}" title="Template löschen">🗑️</button>
+                </div>
+              </div>
+            `;
+          }).join('');
+
+          listEl.querySelectorAll('[data-tpl-apply]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+              const id = btn.getAttribute('data-tpl-apply');
+              const tpl = (state.boardTemplates || []).find((t) => t.id === id);
+              if (!tpl) return;
+              const autoFill = !!document.getElementById('tplAutoFillCb')?.checked;
+              pushCanvasUndo(folderId);
+
+              content.board.canvasSettings = {
+                ...(content.board.canvasSettings || {}),
+                bgColor: tpl.bgColor || '',
+                bgMode: tpl.bgMode || 'default',
+                fitMode: tpl.fitMode || 'cover',
+                boardWidth: Number(tpl.boardWidth) || 0,
+                boardHeight: Number(tpl.boardHeight) || 0
+              };
+
+              const newElements = (tpl.elements || []).map((el) => ({ ...JSON.parse(JSON.stringify(el)), id: uid('cel') }));
+              const projectImages = (content.board.items || []).filter((it) => {
+                const res = resolveBoardItem(it, folderId);
+                return res.kind === 'image';
+              });
+              projectImages.forEach((it) => { it.canvasHidden = true; });
+
+              const slots = Array.isArray(tpl.slots) ? tpl.slots : [];
+              slots.forEach((slot, idx) => {
+                if (autoFill && idx < projectImages.length) {
+                  const target = projectImages[idx];
+                  target.canvasHidden = false;
+                  target.canvas = { ...JSON.parse(JSON.stringify(slot)) };
+                } else {
+                  newElements.push({
+                    ...JSON.parse(JSON.stringify(slot)),
+                    id: uid('cel'),
+                    type: 'placeholder'
+                  });
+                }
+              });
+
+              content.board.canvasElements = newElements;
+              state.selectedCanvasIds.clear();
+              scheduleBoardSave(folderId);
+              closeModal('templatesModal');
+              renderCanvasView(container, statsEl, folderId);
+            });
+          });
+
+          listEl.querySelectorAll('[data-tpl-del]').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+              const id = btn.getAttribute('data-tpl-del');
+              const ok = await uiConfirm('Dieses Template wirklich löschen?', 'Template löschen');
+              if (!ok) return;
+              state.boardTemplates = (state.boardTemplates || []).filter((t) => t.id !== id);
+              await saveBoardTemplates();
+              renderList();
+            });
+          });
+        }
+
+        saveBtn.onclick = async () => {
+          const name = nameInp.value.trim();
+          if (!name) {
+            uiAlert('Bitte gib einen Namen für das Template ein.');
+            return;
+          }
+          const cs = content.board.canvasSettings || {};
+          const vis = (content.board.items || []).filter((it) => !it.canvasHidden && resolveBoardItem(it, folderId).kind === 'image');
+          const els = content.board.canvasElements || [];
+
+          const slots = [
+            ...vis.map((it) => JSON.parse(JSON.stringify(it.canvas || {}))),
+            ...els.filter((e) => e.type === 'placeholder').map((e) => {
+              const copy = JSON.parse(JSON.stringify(e));
+              delete copy.id;
+              delete copy.type;
+              return copy;
+            })
+          ];
+          const elements = els.filter((e) => e.type !== 'placeholder').map((e) => {
+            const copy = JSON.parse(JSON.stringify(e));
+            delete copy.id;
+            return copy;
+          });
+
+          if (!Array.isArray(state.boardTemplates)) state.boardTemplates = [];
+          state.boardTemplates.unshift({
+            id: uid('tpl'),
+            name,
+            createdAt: new Date().toISOString(),
+            bgColor: cs.bgColor || '',
+            bgMode: cs.bgMode || 'default',
+            fitMode: cs.fitMode || 'cover',
+            boardWidth: Number(cs.boardWidth) || 0,
+            boardHeight: Number(cs.boardHeight) || 0,
+            slots,
+            elements
+          });
+          nameInp.value = '';
+          await saveBoardTemplates();
+          renderList();
+        };
+
+        renderList();
+        openModal('templatesModal');
+      }

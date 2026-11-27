@@ -4,7 +4,7 @@
       /* ========================================================================
          1. KONFIGURATION & STATE
          ======================================================================== */
-      const APP_VERSION = 'v1.0.55';
+      const APP_VERSION = 'v1.0.56';
       const LS_KEYS = {
         clientId: 'mb_oauth_client_id',
         rootName: 'mb_root_folder_name',
@@ -65,6 +65,8 @@
         locationsFileId: null,
         folderIcons: {},
         folderIconsFileId: null,
+        boardTemplates: [],
+        templatesFileId: null,
         inventoryRootId: null,
         activeTagFilters: new Set(),
         activeLocationFilters: new Set(),
@@ -538,8 +540,32 @@
             const data = await DriveAdapter.downloadJson(iconFile.id);
             if (data && typeof data.icons === 'object' && data.icons) state.folderIcons = data.icons;
           }
+
+          const tplFile = files.find((f) => f.name === 'templates.json');
+          if (tplFile) {
+            state.templatesFileId = tplFile.id;
+            const data = await DriveAdapter.downloadJson(tplFile.id);
+            if (Array.isArray(data.templates)) state.boardTemplates = data.templates;
+          }
         } catch (e) {
           console.warn('Root-Metadaten konnten nicht geladen werden:', e);
+        }
+      }
+
+      async function saveBoardTemplates() {
+        if (state.mode === 'demo') {
+          const demo = DemoAdapter.load();
+          demo.boardTemplates = state.boardTemplates;
+          DemoAdapter.save(demo);
+          return;
+        }
+        if (state.mode !== 'drive' || !state.rootFolderId || !state.accessToken) return;
+        try {
+          const blob = new Blob([JSON.stringify({ templates: state.boardTemplates }, null, 2)], { type: 'application/json' });
+          const saved = await DriveAdapter.uploadMultipart(state.rootFolderId, 'templates.json', 'application/json', blob, state.templatesFileId);
+          state.templatesFileId = saved.id;
+        } catch (e) {
+          console.warn('templates.json konnte nicht gespeichert werden:', e);
         }
       }
 
@@ -832,6 +858,7 @@
         if (Array.isArray(demo.globalTags)) state.globalTags = demo.globalTags;
         if (Array.isArray(demo.globalLocations)) state.globalLocations = demo.globalLocations;
         state.folderIcons = (demo.folderIcons && typeof demo.folderIcons === 'object') ? demo.folderIcons : {};
+        state.boardTemplates = Array.isArray(demo.boardTemplates) ? demo.boardTemplates : [];
         state.rootFolderId = demo.rootFolderId;
         state.folders = demo.folders;
         let invFolder = state.folders.find((f) => f.name === '_Inventory' && (f.parents || []).includes(state.rootFolderId));

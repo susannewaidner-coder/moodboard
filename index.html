@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>Moodboard &amp; Projekt-Planer — Google Drive</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <link rel="stylesheet" href="css/styles.css?v=1.0.55" />
+  <link rel="stylesheet" href="css/styles.css?v=1.0.56" />
 </head>
 </head>
 <body>
@@ -709,6 +709,50 @@
   </div>
 
   <!-- ======================================================================
+       MODAL: MOODBOARD TEMPLATES
+       ====================================================================== -->
+  <div id="templatesModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="templatesModalTitle">
+    <div class="modal-card" style="max-width:540px;">
+      <div class="modal-header">
+        <h2 id="templatesModalTitle" class="modal-title">📑 Moodboard-Templates</h2>
+        <button class="btn-icon" data-close-modal="templatesModal" type="button">✕</button>
+      </div>
+      <div style="display:flex; gap:8px; margin-bottom:12px;">
+        <input id="newTemplateNameInput" class="form-control" type="text" placeholder="Name für aktuelles Board (z. B. Vision Board 1220×600)..." />
+        <button id="saveCurrentAsTemplateBtn" class="btn btn-oak btn-sm" type="button">💾 Speichern</button>
+      </div>
+      <label style="display:flex; align-items:center; gap:8px; font-size:0.82rem; margin-bottom:12px; cursor:pointer; color:var(--text-secondary);">
+        <input id="tplAutoFillCb" type="checkbox" checked />
+        <span>Beim Anwenden vorhandene Projekt-Bilder automatisch in die Slots einfüllen</span>
+      </label>
+      <div id="templatesList" style="display:flex; flex-direction:column; gap:8px; max-height:46vh; overflow-y:auto;"></div>
+      <div class="modal-footer">
+        <button class="btn" data-close-modal="templatesModal" type="button">Schließen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================
+       MODAL: BILD FÜR PLATZHALTER WÄHLEN
+       ====================================================================== -->
+  <div id="placeholderPickModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="placeholderPickTitle">
+    <div class="modal-card" style="max-width:720px;">
+      <div class="modal-header">
+        <h2 id="placeholderPickTitle" class="modal-title">🖼️ Bild für Platzhalter wählen</h2>
+        <button class="btn-icon" data-close-modal="placeholderPickModal" type="button">✕</button>
+      </div>
+      <div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
+        <button id="phPickFromInvBtn" class="btn btn-oak btn-sm" type="button">📦 Aus Inventory wählen</button>
+        <button id="phUploadNewBtn" class="btn btn-sm" type="button">＋ Neues Bild hochladen</button>
+      </div>
+      <div id="placeholderPickGrid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(135px, 1fr)); gap:10px; max-height:50vh; overflow-y:auto; padding:2px;"></div>
+      <div class="modal-footer">
+        <button class="btn" data-close-modal="placeholderPickModal" type="button">Abbrechen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================
        MODAL: UNIVERSELLES DIALOG-MODAL (ERSETZT ALERT / CONFIRM / PROMPT)
        ====================================================================== -->
   <!-- ======================================================================
@@ -769,9 +813,9 @@
     </div>
   </div>
 
-  <script defer src="js/core.js?v=1.0.55"></script>
-  <script defer src="js/views.js?v=1.0.55"></script>
-  <script defer src="js/canvas-home.js?v=1.0.55"></script>
-  <script defer src="js/ai-pdf.js?v=1.0.55"></script>
+  <script defer src="js/core.js?v=1.0.56"></script>
+  <script defer src="js/views.js?v=1.0.56"></script>
+  <script defer src="js/canvas-home.js?v=1.0.56"></script>
+  <script defer src="js/ai-pdf.js?v=1.0.56"></script>
 </body>
 </html>
