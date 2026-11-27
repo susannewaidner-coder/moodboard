@@ -100,10 +100,10 @@
         if (shape === 'rounded' || shape === 'pill') return `${Math.max(0, Number(radius) || 14)}px`;
         if (shape === 'semicircle') {
           const a = ((Number(angle) || 0) % 360 + 360) % 360;
-          if (a === 90) return '0 999px 999px 0';
-          if (a === 180) return '0 0 999px 999px';
-          if (a === 270) return '999px 0 0 999px';
-          return '999px 999px 0 0';
+          if (a === 90) return '0 100% 100% 0 / 0 50% 50% 0';
+          if (a === 180) return '0 0 50% 50% / 0 0 100% 100%';
+          if (a === 270) return '100% 0 0 100% / 50% 0 0 50%';
+          return '50% 50% 0 0 / 100% 100% 0 0';
         }
         if (shape === 'quartercircle') {
           const a = ((Number(angle) || 0) % 360 + 360) % 360;
@@ -126,17 +126,30 @@
           return;
         }
         if (shape === 'semicircle') {
-          const r = Math.max(w, h);
           const a = ((Number(angle) || 0) % 360 + 360) % 360;
-          const radii = a === 90 ? [0, r, r, 0] : (a === 180 ? [0, 0, r, r] : (a === 270 ? [r, 0, 0, r] : [r, r, 0, 0]));
-          ctx.roundRect(x, y, w, h, radii);
+          if (a === 90) ctx.ellipse(x, y + h / 2, w, h / 2, 0, -Math.PI / 2, Math.PI / 2, false);
+          else if (a === 180) ctx.ellipse(x + w / 2, y, w / 2, h, 0, 0, Math.PI, false);
+          else if (a === 270) ctx.ellipse(x + w, y + h / 2, w, h / 2, 0, Math.PI / 2, Math.PI * 1.5, false);
+          else ctx.ellipse(x + w / 2, y + h, w / 2, h, 0, Math.PI, 0, false);
+          ctx.closePath();
           return;
         }
         if (shape === 'quartercircle') {
-          const r = Math.max(w, h);
           const a = ((Number(angle) || 0) % 360 + 360) % 360;
-          const radii = a === 90 ? [0, r, 0, 0] : (a === 180 ? [0, 0, r, 0] : (a === 270 ? [0, 0, 0, r] : [r, 0, 0, 0]));
-          ctx.roundRect(x, y, w, h, radii);
+          if (a === 90) {
+            ctx.moveTo(x, y + h);
+            ctx.ellipse(x, y + h, w, h, 0, -Math.PI / 2, 0, false);
+          } else if (a === 180) {
+            ctx.moveTo(x, y);
+            ctx.ellipse(x, y, w, h, 0, 0, Math.PI / 2, false);
+          } else if (a === 270) {
+            ctx.moveTo(x + w, y);
+            ctx.ellipse(x + w, y, w, h, 0, Math.PI / 2, Math.PI, false);
+          } else {
+            ctx.moveTo(x + w, y + h);
+            ctx.ellipse(x + w, y + h, w, h, 0, Math.PI, Math.PI * 1.5, false);
+          }
+          ctx.closePath();
           return;
         }
         ctx.rect(x, y, w, h);
@@ -988,10 +1001,21 @@
             const shape = btn.getAttribute('data-sel-shape');
             for (const entry of getSelTiles()) {
               entry.box.shape = shape;
-              if (shape === 'circle') {
+              if (shape === 'circle' || shape === 'quartercircle') {
                 const size = Math.min(entry.box.w || 200, entry.box.h || 200);
                 entry.box.w = size;
                 entry.box.h = size;
+              } else if (shape === 'semicircle') {
+                const a = ((Number(entry.box.shapeAngle) || 0) % 360 + 360) % 360;
+                if (a === 90 || a === 270) {
+                  const baseH = Math.max(120, entry.box.h || 200);
+                  entry.box.h = baseH;
+                  entry.box.w = Math.max(60, Math.round(baseH / 2));
+                } else {
+                  const baseW = Math.max(120, entry.box.w || 220);
+                  entry.box.w = baseW;
+                  entry.box.h = Math.max(60, Math.round(baseW / 2));
+                }
               }
             }
             scheduleBoardSave(folderId);
@@ -1166,6 +1190,11 @@
           pushCanvasUndo(folderId);
           getSelTiles().forEach((e) => {
             e.box.shapeAngle = ((Number(e.box.shapeAngle) || 0) + 90) % 360;
+            if (e.box.shape === 'semicircle') {
+              const oldW = e.box.w;
+              e.box.w = e.box.h;
+              e.box.h = oldW;
+            }
           });
           scheduleBoardSave(folderId);
           renderCanvasView(container, statsEl, folderId);
