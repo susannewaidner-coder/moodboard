@@ -481,6 +481,10 @@
       color: var(--text-primary);
     }
 
+    .hidden {
+      display: none !important;
+    }
+
     .status-banner.hidden {
       display: none;
     }

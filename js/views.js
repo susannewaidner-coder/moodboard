@@ -1292,8 +1292,12 @@
         const resolved = item ? resolveBoardItem(item) : null;
         const dataItem = resolved || item;
         const isRef = !!(item && item.type === 'ref');
+        const showRefBanner = isRef && !isInventoryFolder(state.activeFolderId);
         const banner = document.getElementById('itemRefInfoBanner');
-        if (banner) banner.classList.toggle('hidden', !isRef);
+        if (banner) {
+          banner.classList.toggle('hidden', !showRefBanner);
+          banner.style.display = showRefBanner ? '' : 'none';
+        }
 
         const isBookmark = !dataItem || dataItem.type === 'bookmark';
         document.getElementById('itemModalTitle').textContent = item ? 'Element bearbeiten' : 'Neues Web-Bookmark';
