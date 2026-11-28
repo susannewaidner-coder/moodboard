@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>Moodboard &amp; Projekt-Planer — Google Drive</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <link rel="stylesheet" href="css/styles.css?v=1.0.64" />
+  <link rel="stylesheet" href="css/styles.css?v=1.0.65" />
 </head>
 </head>
 <body>
@@ -205,6 +205,15 @@
         <label class="form-label" for="itemPreviewInput">Vorschaubild-URL (optional)</label>
         <input id="itemPreviewInput" class="form-control" type="url" placeholder="https://.../bild.jpg" />
         <img id="itemPreviewThumb" alt="" style="display:none; margin-top:8px; max-height:110px; border-radius:var(--radius-sm); border:1px solid var(--border-color);" />
+      </div>
+
+      <div class="form-group" id="itemReplaceImageGroup" style="display:none;">
+        <label class="form-label">Bilddatei in Drive / Projekt</label>
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <input id="itemReplaceImageInput" type="file" accept="image/*" style="display:none;" />
+          <button id="itemReplaceImageBtn" class="btn btn-sm" type="button">📤 Bilddatei hochladen / ersetzen</button>
+          <span id="itemReplaceImageStatus" class="form-hint" style="margin:0;"></span>
+        </div>
       </div>
 
       <div class="form-group">
@@ -753,6 +762,29 @@
   </div>
 
   <!-- ======================================================================
+       MODAL: RAINDROP IMPORT ZUSAMMENFASSUNG
+       ====================================================================== -->
+  <div id="raindropSummaryModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="raindropSummaryTitle">
+    <div class="modal-card" style="max-width:620px;">
+      <div class="modal-header">
+        <h2 id="raindropSummaryTitle" class="modal-title">📥 Raindrop-Import Zusammenfassung</h2>
+        <button class="btn-icon" data-close-modal="raindropSummaryModal" type="button">✕</button>
+      </div>
+      <div id="raindropSummaryStats" style="padding:10px 12px; border-radius:var(--radius-sm); background:var(--card-subtle); border:1px solid var(--border-color); font-size:0.86rem; margin-bottom:12px;"></div>
+      <div id="raindropSummaryManualWrap" class="hidden">
+        <div style="font-size:0.85rem; font-weight:600; margin-bottom:6px; color:var(--text-primary);">⚠️ Manuell zu speichern (durch Server-CORS blockiert):</div>
+        <div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:8px;">
+          Diese Bilder konnten vom Browser nicht automatisch in Google Drive gespeichert werden. Öffne den jeweiligen Link, speichere das Bild lokal und lade es direkt an der Karte über <strong>✏️ Bearbeiten → 📤 Bilddatei hochladen / ersetzen</strong> hoch:
+        </div>
+        <div id="raindropSummaryManualList" style="display:flex; flex-direction:column; gap:6px; max-height:42vh; overflow-y:auto; padding-right:4px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" data-close-modal="raindropSummaryModal" type="button">Verstanden</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================
        MODAL: UNIVERSELLES DIALOG-MODAL (ERSETZT ALERT / CONFIRM / PROMPT)
        ====================================================================== -->
   <!-- ======================================================================
@@ -813,9 +845,9 @@
     </div>
   </div>
 
-  <script defer src="js/core.js?v=1.0.64"></script>
-  <script defer src="js/views.js?v=1.0.64"></script>
-  <script defer src="js/canvas-home.js?v=1.0.64"></script>
-  <script defer src="js/ai-pdf.js?v=1.0.64"></script>
+  <script defer src="js/core.js?v=1.0.65"></script>
+  <script defer src="js/views.js?v=1.0.65"></script>
+  <script defer src="js/canvas-home.js?v=1.0.65"></script>
+  <script defer src="js/ai-pdf.js?v=1.0.65"></script>
 </body>
 </html>

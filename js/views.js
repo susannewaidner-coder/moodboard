@@ -1320,6 +1320,17 @@
         document.getElementById('fetchBookmarkMetaBtn').style.display = isBookmark ? 'inline-flex' : 'none';
         document.getElementById('bookmarkMetaHint').textContent = isBookmark ? 'Beim Einfügen einer URL werden Titel & Vorschaubild automatisch geladen.' : '';
         updateBookmarkPreviewThumb();
+        const repGroup = document.getElementById('itemReplaceImageGroup');
+        const repStatus = document.getElementById('itemReplaceImageStatus');
+        const repInput = document.getElementById('itemReplaceImageInput');
+        if (repInput) repInput.value = '';
+        if (repGroup) repGroup.style.display = item ? 'block' : 'none';
+        if (repStatus && dataItem) {
+          if (dataItem.driveFileId) repStatus.textContent = '✅ In Google Drive gespeichert';
+          else if (dataItem.localDataUrl) repStatus.textContent = '✅ Lokal im Projekt gespeichert';
+          else if (dataItem.previewImageUrl) repStatus.textContent = '⚠️ Nur externer Bild-Link (nicht in Drive)';
+          else repStatus.textContent = 'Noch keine Bilddatei hinterlegt';
+        }
         const shop = dataItem && dataItem.shopping ? dataItem.shopping : { enabled: false, price: '', quantity: 1, status: 'idea' };
         document.getElementById('itemShopEnabled').checked = !!shop.enabled;
         document.getElementById('itemShopPrice').value = shop.price || '';
@@ -1667,6 +1678,8 @@
         const touchedFolders = new Set([state.activeFolderId]);
         let importedCount = 0;
         let skippedCount = 0;
+        let driveSavedCount = 0;
+        const manualFixList = [];
 
         for (let i = 0; i < rows.length; i++) {
           const row = rows[i];
@@ -1719,6 +1732,14 @@
                 existingDup.previewImageUrl = fallbackPreviewUrl;
                 fixed = true;
               }
+            }
+            if (!existingDup.driveFileId && !existingDup.localDataUrl && isRaindropFile && uploadImgs) {
+              const folderObj = state.folders.find((f) => f.id === targetFolderId);
+              manualFixList.push({
+                title: existingDup.title || row.title || 'Bild',
+                url: existingDup.previewImageUrl || fallbackPreviewUrl || url,
+                folderName: folderObj ? folderObj.name : ''
+              });
             }
             if (fixed) importedCount++; else skippedCount++;
             continue;
@@ -1782,6 +1803,15 @@
             tags: Array.from(new Set(finalTags)),
             shopping: { enabled: false, price: 0, quantity: 1, status: 'bought' }
           });
+          if (driveFileId || localDataUrl) driveSavedCount++;
+          else if (uploadImgs && isRaindropFile && fallbackPreviewUrl) {
+            const folderObj = state.folders.find((f) => f.id === targetFolderId);
+            manualFixList.push({
+              title,
+              url: fallbackPreviewUrl,
+              folderName: folderObj ? folderObj.name : ''
+            });
+          }
           importedCount++;
         }
 
@@ -1793,6 +1823,34 @@
         renderMainView();
         showSyncStatus(`✅ ${importedCount} importiert (${skippedCount} übersprungen)`, true);
         setTimeout(() => showSyncStatus('', false), 3200);
+
+        const sumStats = document.getElementById('raindropSummaryStats');
+        const sumWrap = document.getElementById('raindropSummaryManualWrap');
+        const sumList = document.getElementById('raindropSummaryManualList');
+        if (sumStats && sumWrap && sumList) {
+          sumStats.innerHTML = `
+            <div><strong>Importiert / aktualisiert:</strong> ${importedCount}</div>
+            <div><strong>Übersprungen (bereits vorhanden):</strong> ${skippedCount}</div>
+            <div><strong>Direkt in Drive / Projekt gespeichert:</strong> ${driveSavedCount}</div>
+            <div><strong>Manuell nachzuladen:</strong> ${manualFixList.length}</div>
+          `;
+          if (manualFixList.length > 0) {
+            sumWrap.classList.remove('hidden');
+            sumList.innerHTML = manualFixList.map((m) => `
+              <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 10px; border:1px solid var(--border-color); border-radius:var(--radius-sm); background:var(--card-bg);">
+                <div style="min-width:0;">
+                  <div style="font-weight:600; font-size:0.84rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(m.title)}</div>
+                  <div style="font-size:0.74rem; color:var(--text-secondary);">${m.folderName ? `Ordner: ${escapeHtml(m.folderName)}` : ''}</div>
+                </div>
+                <a href="${escapeHtml(m.url)}" target="_blank" rel="noopener" class="btn btn-oak btn-sm" style="flex-shrink:0; text-decoration:none;">🔗 Bild öffnen</a>
+              </div>
+            `).join('');
+          } else {
+            sumWrap.classList.add('hidden');
+            sumList.innerHTML = '';
+          }
+          openModal('raindropSummaryModal');
+        }
       });
       document.getElementById('addDocBtn').addEventListener('click', createNewGoogleDoc);
 
@@ -1863,6 +1921,48 @@
         closeModal('itemModal');
         renderMainView();
       });
+
+      const itemRepImgBtn = document.getElementById('itemReplaceImageBtn');
+      const itemRepImgInput = document.getElementById('itemReplaceImageInput');
+      if (itemRepImgBtn && itemRepImgInput) {
+        itemRepImgBtn.addEventListener('click', () => itemRepImgInput.click());
+        itemRepImgInput.addEventListener('change', async (e) => {
+          const file = e.target.files && e.target.files[0];
+          if (!file || !state.editingItem) return;
+          const statusEl = document.getElementById('itemReplaceImageStatus');
+          if (statusEl) statusEl.textContent = 'Lade hoch…';
+          try {
+            let targetItem = state.editingItem;
+            let targetFolderId = state.activeFolderId;
+            if (state.editingItem.type === 'ref') {
+              const resolved = resolveBoardItem(state.editingItem);
+              if (resolved && resolved.targetItem) {
+                targetItem = resolved.targetItem;
+                targetFolderId = resolved.targetFolderId;
+              }
+            } else {
+              const found = findItemWithFolder(state.editingItem.id);
+              if (found) targetFolderId = found.fId;
+            }
+            const fc = state.folderContents[targetFolderId];
+            if (!fc) return;
+            const upRes = await uploadRaindropImageBlob(file, file.name, targetItem.raindropId || targetItem.id, targetFolderId, fc);
+            targetItem.type = 'image';
+            if (upRes.driveFileId) targetItem.driveFileId = upRes.driveFileId;
+            if (upRes.localDataUrl) targetItem.localDataUrl = upRes.localDataUrl;
+            targetItem.previewImageUrl = '';
+            document.getElementById('itemPreviewInput').value = '';
+            updateBookmarkPreviewThumb();
+            scheduleBoardSave(targetFolderId);
+            if (statusEl) statusEl.textContent = upRes.driveFileId ? '✅ In Google Drive gespeichert' : '✅ Lokal im Projekt gespeichert';
+            renderMainView();
+          } catch (err) {
+            if (statusEl) statusEl.textContent = '❌ Fehler: ' + err.message;
+          } finally {
+            itemRepImgInput.value = '';
+          }
+        });
+      }
 
       /* ========================================================================
          12c. INVENTORY PICKER & VERSCHIEBEN INS INVENTORY
