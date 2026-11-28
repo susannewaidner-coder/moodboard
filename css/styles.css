@@ -1043,11 +1043,15 @@
       min-height: 0;
     }
 
+    .view-content:has(.canvas-view-wrap) {
+      padding-bottom: 8px;
+    }
+
     .canvas-viewport {
       position: relative;
       width: 100%;
-      height: calc(100vh - 250px);
-      min-height: 540px;
+      height: calc(100vh - 230px);
+      min-height: 360px;
       background-color: var(--card-subtle);
       background-image: radial-gradient(var(--border-color) 1px, transparent 1px);
       background-size: 22px 22px;
