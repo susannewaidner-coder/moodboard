@@ -2324,7 +2324,6 @@
                 }
               }
               state.selectedGalleryIds.clear();
-              if (idSet === state.selectedCanvasIds) state.selectedCanvasIds.clear();
               state.gallerySelectMode = false;
               renderMainView();
               showSyncStatus(`✅ ${targets.length + docTargets.length} Element(e) verschoben`, true);
