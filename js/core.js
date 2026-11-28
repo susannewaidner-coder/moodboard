@@ -4,7 +4,7 @@
       /* ========================================================================
          1. KONFIGURATION & STATE
          ======================================================================== */
-      const APP_VERSION = 'v1.0.67';
+      const APP_VERSION = 'v1.0.68';
       const LS_KEYS = {
         clientId: 'mb_oauth_client_id',
         rootName: 'mb_root_folder_name',
@@ -34,6 +34,7 @@
         activeView: 'gallery',   // 'gallery' | 'home' | 'canvas' | 'planning'
         galleryMode: 'grid',     // 'grid' | 'list'
         searchQuery: '',
+        searchScope: 'folder',   // 'folder' | 'all'
         folderContents: {},      // folderId -> { board, boardFileId, modifiedTime, driveFiles: [] }
         objectUrls: new Map(),   // driveFileId -> blobObjectUrl
         dirtyFolders: new Set(),

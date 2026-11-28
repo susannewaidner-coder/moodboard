@@ -493,7 +493,25 @@
         return haystack.includes(q);
       }
 
+      async function ensureAllFoldersLoaded() {
+        const missing = state.folders.map((f) => f.id).filter((id) => !state.folderContents[id]);
+        if (missing.length === 0) return;
+        showSyncStatus(`Lade ${missing.length} Ordner für Gesamtsuche…`, true);
+        try {
+          await ensureFoldersLoaded(missing);
+        } finally {
+          showSyncStatus('', false);
+        }
+      }
+
       function renderAllItemsGallery(container, statsEl) {
+        if (!window._loadingAllFolders && state.folders.some((f) => !state.folderContents[f.id])) {
+          window._loadingAllFolders = true;
+          ensureAllFoldersLoaded().finally(() => {
+            window._loadingAllFolders = false;
+            if (state.quickView === 'all' || state.searchScope === 'all') renderMainView();
+          });
+        }
         const allItems = [];
         for (const [fId, data] of Object.entries(state.folderContents)) {
           const folder = state.folders.find((f) => f.id === fId);
@@ -504,9 +522,9 @@
             }
           }
         }
-        statsEl.textContent = `${allItems.length} Treffer in geladenen Ordnern`;
+        statsEl.textContent = `${allItems.length} Treffer in allen Ordnern`;
         if (allItems.length === 0) {
-          container.innerHTML = '<div class="phase-placeholder">Keine passenden Elemente gefunden. Öffne zuerst deine Projektordner oder passe die Suche an.</div>';
+          container.innerHTML = '<div class="phase-placeholder">Keine passenden Elemente gefunden. Passe die Suche oder Filter an.</div>';
           return;
         }
         container.innerHTML = `<div class="gallery-grid">${allItems.map((e) => renderItemCardHtml(e.item, e.folderName)).join('')}</div>`;
@@ -528,6 +546,10 @@
       }
 
       function renderGalleryView(container, statsEl, folderId) {
+        if (state.searchScope === 'all' && (state.searchQuery.trim() || state.activeTagFilters.size > 0 || state.activeLocationFilters.size > 0)) {
+          renderAllItemsGallery(container, statsEl);
+          return;
+        }
         const content = state.folderContents[folderId];
         const isInvFolder = isInventoryFolder(folderId);
         const resolvedItems = (content.board.items || []).map((it) => resolveBoardItem(it, folderId));
@@ -2472,6 +2494,19 @@
         state.searchQuery = e.target.value;
         renderMainView();
       });
+
+      const searchScopeBtn = document.getElementById('searchScopeBtn');
+      if (searchScopeBtn) {
+        searchScopeBtn.addEventListener('click', async () => {
+          state.searchScope = state.searchScope === 'all' ? 'folder' : 'all';
+          searchScopeBtn.textContent = state.searchScope === 'all' ? '🌐 Alle' : '📁 Ordner';
+          searchScopeBtn.classList.toggle('btn-oak', state.searchScope === 'all');
+          if (state.searchScope === 'all') {
+            await ensureAllFoldersLoaded();
+          }
+          renderMainView();
+        });
+      }
 
 
       /* ========================================================================
