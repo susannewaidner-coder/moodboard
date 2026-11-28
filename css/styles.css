@@ -559,12 +559,18 @@
        5. GALERIE / RAINDROP-ANSICHT
        ========================================================================== */
     .gallery-toolbar {
+      position: sticky;
+      top: var(--topbar-h, 46px);
+      z-index: 25;
+      background-color: var(--bg-color);
+      padding: 6px 0;
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       justify-content: space-between;
       gap: 6px;
       margin-bottom: 10px;
+      border-bottom: 1px solid var(--border-color);
     }
 
     .pill-group {
@@ -938,6 +944,9 @@
        8. PHASE 2: MOODBOARD-CANVAS & PROJEKT-STARTSEITE
        ========================================================================== */
     .canvas-toolbar {
+      position: sticky;
+      top: var(--topbar-h, 46px);
+      z-index: 26;
       display: flex;
       flex-wrap: wrap;
       align-items: center;
@@ -948,6 +957,11 @@
       background-color: var(--card-bg);
       border: 1px solid var(--border-color);
       border-radius: var(--radius-md);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .canvas-view-wrap.fullscreen .canvas-toolbar {
+      top: 0;
     }
 
     .canvas-toolbar-group {
@@ -1234,6 +1248,9 @@
     }
 
     .canvas-selection-bar {
+      position: sticky;
+      top: calc(var(--topbar-h, 46px) + 42px);
+      z-index: 25;
       display: flex;
       align-items: center;
       gap: 6px;
@@ -1243,6 +1260,10 @@
       background: var(--card-bg);
       border-bottom: 1px solid var(--border-color);
       font-size: 0.76rem;
+    }
+
+    .canvas-view-wrap.fullscreen .canvas-selection-bar {
+      top: 42px;
     }
 
     .canvas-selection-bar .btn-sm {
@@ -1812,8 +1833,8 @@
 
     .bulk-action-bar {
       position: sticky;
-      top: 8px;
-      z-index: 30;
+      top: calc(var(--topbar-h, 46px) + 46px);
+      z-index: 24;
       display: flex;
       align-items: center;
       justify-content: space-between;

@@ -2508,6 +2508,20 @@
         });
       }
 
+      (function bindTopbarStickyHeight() {
+        const topbarEl = document.querySelector('.topbar');
+        if (!topbarEl) return;
+        const update = () => {
+          document.documentElement.style.setProperty('--topbar-h', `${Math.ceil(topbarEl.getBoundingClientRect().height)}px`);
+        };
+        update();
+        if (typeof ResizeObserver !== 'undefined') {
+          new ResizeObserver(update).observe(topbarEl);
+        } else {
+          window.addEventListener('resize', update);
+        }
+      })();
+
 
       /* ========================================================================
          16. PHASE 3: TO-DOS, EINKAUFSLISTE, BUDGET & SPLIT-VIEW
